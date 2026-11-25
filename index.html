@@ -574,6 +574,47 @@
         </div>
     </div>
 
+    <!-- INTERACTIVE PDF EXPORT & PRE-PRINT EDITOR MODAL -->
+    <div id="pdf-export-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 no-print">
+        <div class="bg-white rounded-2xl border border-slate-200 max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
+                <div>
+                    <h3 class="font-extrabold text-sm text-slate-900">PDF Export & Live Sheet Editor</h3>
+                    <p class="text-[11px] text-slate-500">Edit any text directly on the sheet below before printing or saving as PDF.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" id="pdf-keep-original-btn" onclick="keepOriginalTemplateInExport()"
+                        class="hidden inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold cursor-pointer">
+                        <i data-lucide="file-check-2" class="w-3.5 h-3.5"></i>
+                        <span>Keep Original Uploaded Template</span>
+                    </button>
+                    <label class="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                        <span>Text Scale:</span>
+                        <select id="pdf-font-scale" onchange="updatePdfModalScale()" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold">
+                            <option value="95%">Compact (95%)</option>
+                            <option value="100%" selected>Standard (100%)</option>
+                            <option value="105%">Spacious (105%)</option>
+                        </select>
+                    </label>
+                    <button type="button" onclick="syncPdfModalToResume()" class="px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-bold cursor-pointer">
+                        Sync Edits to Resume
+                    </button>
+                    <button type="button" onclick="printFromPdfModal()" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer">
+                        <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                        <span>Print / Save PDF</span>
+                    </button>
+                    <button type="button" onclick="closePdfExportModal()" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 cursor-pointer">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-4 sm:p-6 bg-slate-200/70 overflow-y-auto custom-scrollbar flex-1">
+                <div id="pdf-editable-sheet" contenteditable="true"
+                    class="bg-white mx-auto max-w-[780px] rounded-lg shadow-md border border-slate-300 p-6 sm:p-8 text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
     <div id="toast-banner" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-lg no-print">
         <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 shrink-0"></i>
@@ -598,66 +639,66 @@
             lastAnalysis: null
         };
 
-        // 100 Unique Resume.io-Inspired Templates across 6 Categories
+        // 100 Unique Resume.io-Inspired Templates across 6 Categories with distinct visual archetypes
         const RESUME_TEMPLATES = (() => {
             const defs = [
                 // 20 ATS
                 ['prime-ats','Prime ATS','ats','classic','sans','Single-column Workday & Greenhouse gold standard'],
-                ['pure-ats','Pure ATS','ats','classic','sans','Zero-distraction high-density ATS parser layout'],
-                ['simple-ats','Simple ATS','ats','clean','sans','Clean left-aligned ATS layout with crisp rules'],
+                ['pure-ats','Pure ATS','ats','clean','sans','Zero-distraction high-density ATS parser layout'],
+                ['simple-ats','Simple ATS','ats','left-accent','sans','Clean left-aligned ATS layout with crisp rules'],
                 ['classic-ats','Classic ATS','ats','classic','serif','Traditional academic serif single-column ATS'],
-                ['tech-ats','Tech ATS','ats','classic','sans','Jake-style software & cloud engineering layout'],
+                ['tech-ats','Tech ATS','ats','pill-skills','sans','Jake-style software & cloud engineering layout'],
                 ['executive-ats','Executive ATS','ats','classic','serif','Authoritative serif hierarchy for leadership roles'],
-                ['graduate-ats','Graduate ATS','ats','classic','sans','Education-first new grad & intern layout'],
+                ['graduate-ats','Graduate ATS','ats','card-blocks','sans','Education-first new grad & intern layout'],
                 ['compact-ats','Compact ATS','ats','compact','sans','Tight spacing built to fit 1 full page cleanly'],
                 ['federal-ats','Federal ATS','ats','clean','sans','Structured compliance-ready public sector layout'],
-                ['precision-ats','Precision ATS','ats','clean','sans','Sharp geometric dividers & clear skill blocks'],
-                ['greenhouse-pro','Greenhouse Pro','ats','classic','sans','Optimized for Greenhouse field extraction'],
+                ['precision-ats','Precision ATS','ats','left-accent','sans','Sharp geometric dividers & clear skill blocks'],
+                ['greenhouse-pro','Greenhouse Pro','ats','pill-skills','sans','Optimized for Greenhouse field extraction'],
                 ['lever-standard','Lever Standard','ats','clean','sans','Balanced spacing for Lever ATS parsing'],
                 ['taleo-enterprise','Taleo Enterprise','ats','classic','serif','Legacy-safe plain structure for Taleo'],
-                ['icims-verified','iCIMS Verified','ats','clean','sans','Clean section headers for iCIMS scanners'],
-                ['cybersec-ats','CyberSec ATS','ats','classic','sans','Tailored for SOC, Threat & Cloud Security roles'],
-                ['quant-finance-ats','Quant Finance ATS','ats','classic','serif','Dense analytical layout for quant & finance'],
+                ['icims-verified','iCIMS Verified','ats','card-blocks','sans','Clean section headers for iCIMS scanners'],
+                ['cybersec-ats','CyberSec ATS','ats','pill-skills','sans','Tailored for SOC, Threat & Cloud Security roles'],
+                ['quant-finance-ats','Quant Finance ATS','ats','compact','serif','Dense analytical layout for quant & finance'],
                 ['clinical-ats','Clinical ATS','ats','classic','serif','Structured credentials & clinical experience'],
                 ['systems-eng-ats','Systems Eng ATS','ats','compact','sans','High-density systems & infrastructure format'],
-                ['summer-intern-ats','Summer Intern ATS','ats','classic','sans','Campus & hackathon-focused intern layout'],
+                ['summer-intern-ats','Summer Intern ATS','ats','card-blocks','sans','Campus & hackathon-focused intern layout'],
                 ['research-ats','Research ATS','ats','classic','serif','Publications & lab work academic layout'],
                 // 16 Simple
                 ['toronto','Toronto','simple','clean','sans','Effortless Canadian minimalist single-column'],
-                ['stockholm','Stockholm','simple','clean','sans','Nordic whitespace with clean typographic focus'],
+                ['stockholm','Stockholm','simple','left-accent','sans','Nordic whitespace with clean typographic focus'],
                 ['oslo','Oslo','simple','clean','sans','Subtle header rule with airy section spacing'],
-                ['copenhagen','Copenhagen','simple','classic','sans','Balanced modern Scandinavian simplicity'],
+                ['copenhagen','Copenhagen','simple','pill-skills','sans','Balanced modern Scandinavian simplicity'],
                 ['helsinki','Helsinki','simple','clean','sans','Crisp monochrome clarity for any industry'],
-                ['vancouver','Vancouver','simple','clean','sans','Friendly, approachable West Coast structure'],
+                ['vancouver','Vancouver','simple','left-accent','sans','Friendly, approachable West Coast structure'],
                 ['montreal','Montreal','simple','classic','serif','Refined bilingual-ready academic simplicity'],
                 ['ottawa','Ottawa','simple','clean','sans','Straightforward policy & operations layout'],
-                ['auckland','Auckland','simple','clean','sans','Open, readable layout with clear hierarchy'],
+                ['auckland','Auckland','simple','card-blocks','sans','Open, readable layout with clear hierarchy'],
                 ['wellington','Wellington','simple','classic','sans','Clean centered header & structured bullets'],
                 ['reykjavik','Reykjavik','simple','compact','sans','Ultra-clean compact single-page layout'],
-                ['gothenburg','Gothenburg','simple','clean','sans','Minimalist engineering & product layout'],
-                ['malmo','Malmö','simple','clean','sans','Light dividers with strong section titles'],
+                ['gothenburg','Gothenburg','simple','left-accent','sans','Minimalist engineering & product layout'],
+                ['malmo','Malmö','simple','pill-skills','sans','Light dividers with strong section titles'],
                 ['bergen','Bergen','simple','classic','sans','Understated elegance with crisp alignment'],
                 ['calgary','Calgary','simple','clean','sans','Direct, results-driven single-column flow'],
                 ['halifax','Halifax','simple','classic','serif','Classic readability with gentle serif headers'],
                 // 18 Professional
                 ['new-york','New York','professional','classic','serif','Wall Street & corporate law executive standard'],
-                ['london','London','professional','classic','serif','City of London formal serif presentation'],
+                ['london','London','professional','left-accent','serif','City of London formal serif presentation'],
                 ['vienna','Vienna','professional','classic','serif','Distinguished European formal hierarchy'],
-                ['zurich','Zurich','professional','clean','sans','Swiss-grid precision for banking & consulting'],
+                ['zurich','Zurich','professional','pill-skills','sans','Swiss-grid precision for banking & consulting'],
                 ['geneva','Geneva','professional','classic','serif','Diplomatic & international finance elegance'],
-                ['chicago','Chicago','professional','classic','serif','Midwest corporate & MBA recruiting staple'],
+                ['chicago','Chicago','professional','card-blocks','serif','Midwest corporate & MBA recruiting staple'],
                 ['boston','Boston','professional','classic','serif','Ivy & biotech research leadership layout'],
-                ['washington','Washington','professional','classic','serif','Policy, consulting & government affairs'],
+                ['washington','Washington','professional','left-accent','serif','Policy, consulting & government affairs'],
                 ['frankfurt','Frankfurt','professional','clean','sans','Structured German engineering & finance'],
-                ['munich','Munich','professional','clean','sans','Enterprise technology & automotive precision'],
+                ['munich','Munich','professional','pill-skills','sans','Enterprise technology & automotive precision'],
                 ['brussels','Brussels','professional','classic','serif','Formal European institutional layout'],
-                ['luxembourg','Luxembourg','professional','classic','serif','Asset management & advisory serif layout'],
+                ['luxembourg','Luxembourg','professional','card-blocks','serif','Asset management & advisory serif layout'],
                 ['edinburgh','Edinburgh','professional','classic','serif','Academic & actuarial formal structure'],
                 ['oxford','Oxford','professional','classic','serif','Scholarly CV & fellowship standard'],
-                ['cambridge','Cambridge','professional','classic','serif','Research-intensive technical & academic CV'],
-                ['philadelphia','Philadelphia','professional','classic','serif','Healthcare & management consulting format'],
+                ['cambridge','Cambridge','professional','pill-skills','serif','Research-intensive technical & academic CV'],
+                ['philadelphia','Philadelphia','professional','left-accent','serif','Healthcare & management consulting format'],
                 ['houston','Houston','professional','clean','sans','Energy, aerospace & operations professional'],
-                ['atlanta','Atlanta','professional','clean','sans','Supply chain, fintech & enterprise SaaS'],
+                ['atlanta','Atlanta','professional','card-blocks','sans','Supply chain, fintech & enterprise SaaS'],
                 // 16 Two-Column
                 ['sydney','Sydney','twocol','sidebar','sans','Balanced 32/68 split with right skill sidebar'],
                 ['dublin','Dublin','twocol','sidebar','sans','Tech hub two-column with crisp skill rail'],
@@ -677,36 +718,36 @@
                 ['santiago','Santiago','twocol','sidebar','sans','Structured business & tech split layout'],
                 // 16 Modern
                 ['san-francisco','San Francisco','modern','banner','sans','Silicon Valley bold accent header & clean body'],
-                ['seattle','Seattle','modern','banner','sans','Cloud & distributed systems modern format'],
-                ['tokyo','Tokyo','modern','clean','sans','Ultra-crisp high-information-density modern'],
+                ['seattle','Seattle','modern','pill-skills','sans','Cloud & distributed systems modern format'],
+                ['tokyo','Tokyo','modern','card-blocks','sans','Ultra-crisp high-information-density modern'],
                 ['singapore','Singapore','modern','banner','sans','APAC fintech & product management layout'],
-                ['seoul','Seoul','modern','clean','sans','Sharp geometric precision & clean dividers'],
+                ['seoul','Seoul','modern','left-accent','sans','Sharp geometric precision & clean dividers'],
                 ['austin','Austin','modern','banner','sans','Modern SaaS & full-stack startup layout'],
-                ['denver','Denver','modern','clean','sans','Balanced modern outdoor-tech aesthetic'],
+                ['denver','Denver','modern','pill-skills','sans','Balanced modern outdoor-tech aesthetic'],
                 ['miami','Miami','modern','banner','sans','Vibrant accent header with clean structure'],
                 ['dubai','Dubai','modern','banner','sans','Executive modern layout with bold header bar'],
-                ['tel-aviv','Tel Aviv','modern','clean','sans','Cybersecurity & R&D modern engineering sheet'],
+                ['tel-aviv','Tel Aviv','modern','card-blocks','sans','Cybersecurity & R&D modern engineering sheet'],
                 ['bengaluru','Bengaluru','modern','banner','sans','High-impact software & AI engineering format'],
-                ['hyderabad','Hyderabad','modern','clean','sans','Enterprise cloud & data engineering layout'],
-                ['taipei','Taipei','modern','clean','sans','Hardware & embedded systems modern grid'],
+                ['hyderabad','Hyderabad','modern','pill-skills','sans','Enterprise cloud & data engineering layout'],
+                ['taipei','Taipei','modern','left-accent','sans','Hardware & embedded systems modern grid'],
                 ['hong-kong','Hong Kong','modern','banner','sans','Modern APAC finance & strategy layout'],
-                ['kyoto','Kyoto','modern','clean','serif','Minimalist modern serif with serene spacing'],
+                ['kyoto','Kyoto','modern','card-blocks','serif','Minimalist modern serif with serene spacing'],
                 ['shanghai','Shanghai','modern','banner','sans','Fast-paced global tech & commerce layout'],
                 // 14 Creative
                 ['madrid','Madrid','creative','banner','sans','Expressive accent banner with ATS-safe text'],
                 ['barcelona','Barcelona','creative','sidebar','sans','Design-forward two-column ATS layout'],
                 ['milan','Milan','creative','banner','serif','Editorial fashion & brand strategy layout'],
-                ['paris','Paris','creative','classic','serif','Chic editorial typography with crisp rules'],
+                ['paris','Paris','creative','left-accent','serif','Chic editorial typography with crisp rules'],
                 ['rome','Rome','creative','banner','serif','Classic Italian editorial header & clean body'],
-                ['los-angeles','Los Angeles','creative','banner','sans','Media, product design & creative tech'],
+                ['los-angeles','Los Angeles','creative','pill-skills','sans','Media, product design & creative tech'],
                 ['rio','Rio','creative','sidebar','sans','Dynamic accent sidebar with clean hierarchy'],
                 ['buenos-aires','Buenos Aires','creative','banner','sans','Bold creative director & UX layout'],
                 ['mexico-city','Mexico City','creative','sidebar','sans','Modern cultural & digital product layout'],
-                ['istanbul','Istanbul','creative','banner','sans','Cross-continental modern editorial style'],
-                ['athens','Athens','creative','classic','serif','Balanced classical proportions & typography'],
-                ['florence','Florence','creative','classic','serif','Artisanal serif hierarchy with clean bullets'],
+                ['istanbul','Istanbul','creative','card-blocks','sans','Cross-continental modern editorial style'],
+                ['athens','Athens','creative','left-accent','serif','Balanced classical proportions & typography'],
+                ['florence','Florence','creative','card-blocks','serif','Artisanal serif hierarchy with clean bullets'],
                 ['valencia','Valencia','creative','sidebar','sans','Bright modern creative-tech two-column'],
-                ['lyon','Lyon','creative','clean','serif','Refined French editorial single-column']
+                ['lyon','Lyon','creative','left-accent','serif','Refined French editorial single-column']
             ];
             return defs.map(([id, name, cat, layout, font, desc]) => ({ id, name, cat, layout, font, desc }));
         })();
@@ -911,35 +952,41 @@ Requirements:
             showToast('Cleared resume editor.');
         }
 
+        function applyJdPreset(key) {
+            const preset = SAMPLE_PRESETS[key];
+            if (!preset) return;
+            const jArea = document.getElementById('jd-text');
+            if (jArea) {
+                jArea.value = preset.jd;
+                localStorage.setItem('gradats_jd_draft', preset.jd);
+            }
+            runFullScan(true);
+        }
+
         function loadSamplePreset(key) {
             const preset = SAMPLE_PRESETS[key];
             if (!preset) return;
             const rArea = document.getElementById('resume-text');
             const jArea = document.getElementById('jd-text');
             const jSel = document.getElementById('jd-preset-select');
-            if (rArea) pushHistory(rArea.value);
             if (rArea) {
+                pushHistory(rArea.value);
                 rArea.value = preset.resume;
                 localStorage.setItem('gradats_resume_draft', preset.resume);
             }
-            if (jArea && state.jdEnabled) {
+            if (jArea) {
                 jArea.value = preset.jd;
                 localStorage.setItem('gradats_jd_draft', preset.jd);
             }
             if (jSel) jSel.value = key;
             runFullScan(true);
+            generateBulletRewrites();
+            generateOutreachMaterials();
+            generateInterviewPrep();
+            showToast(`Loaded ${key.toUpperCase()} student sample preset!`);
         }
 
-        function applyJdPreset(key) {
-            const preset = SAMPLE_PRESETS[key];
-            const jArea = document.getElementById('jd-text');
-            if (!preset || !jArea) return;
-            jArea.value = preset.jd;
-            localStorage.setItem('gradats_jd_draft', preset.jd);
-            runFullScan(true);
-        }
-
-        // Normalize & Reconstruct Collapsed PDF Lines
+        // Normalize & Reconstruct Collapsed PDF Lines without breaking sentences mid-clause
         function normalizeExtractedResumeText(raw) {
             if (!raw) return '';
             let text = raw.replace(/\r\n/g, '\n').replace(/\u00A0/g, ' ').trim();
@@ -947,7 +994,27 @@ Requirements:
             // Repair split section headers like "PROJECTS\n& LAB WORK"
             text = text.replace(/\bPROJECTS\s*\n+\s*&\s*LAB WORK\b/gi, 'PROJECTS & LAB WORK');
 
-            // If text was flattened onto 1-3 massive lines, segment at standard headers and bullets
+            // Join lines that wrap mid-sentence (line doesn't end with sentence punctuation, colon, or pipe, and next line starts lowercase)
+            const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const mergedLines = [];
+            for (let i = 0; i < rawLines.length; i++) {
+                const curr = rawLines[i];
+                const next = rawLines[i + 1];
+                const isCurrHeader = /^[A-Z][A-Z\s&\/-]{2,36}$/.test(curr);
+                const isNextHeader = next && /^[A-Z][A-Z\s&\/-]{2,36}$/.test(next);
+                const isNextBullet = next && /^[-•*]\s+/.test(next);
+                const endsSentence = /[.!?:|]$/.test(curr);
+                const nextStartsLower = next && /^[a-z]/.test(next);
+
+                if (next && !isCurrHeader && !isNextHeader && !isNextBullet && (!endsSentence || nextStartsLower) && mergedLines.length > 0) {
+                    mergedLines[mergedLines.length - 1] = `${mergedLines[mergedLines.length - 1]} ${curr}`.replace(/\s+/g, ' ');
+                } else {
+                    mergedLines.push(curr);
+                }
+            }
+            text = mergedLines.join('\n');
+
+            // If text was flattened onto 1-4 massive lines, segment at standard headers and bullets
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             if (lines.length <= 4 && text.length > 260) {
                 const sectionHeaders = [
@@ -992,7 +1059,7 @@ Requirements:
                             const str = item.str || '';
                             if (!str.trim()) continue;
                             const y = item.transform ? Math.round(item.transform[5]) : 0;
-                            if (lastY !== null && Math.abs(y - lastY) > 4) {
+                            if (lastY !== null && Math.abs(y - lastY) > 7) {
                                 rows.push(currentRow.join(' ').replace(/\s+/g, ' ').trim());
                                 currentRow = [str];
                             } else {
@@ -1195,6 +1262,7 @@ Requirements:
             AI_CLICHE_MAP.forEach(c => {
                 const m = resumeRaw.match(c.pattern);
                 if (m) aiClicheCount += m.length;
+                c.pattern.lastIndex = 0;
             });
 
             const jdCats = state.jdEnabled ? extractCategorizedJDKeywords(jdRaw) : { hard: [], domain: [] };
@@ -1616,6 +1684,7 @@ Requirements:
 
             AI_CLICHE_MAP.forEach(item => {
                 text = text.replace(item.pattern, item.replacement);
+                item.pattern.lastIndex = 0;
             });
 
             const metricBank = [
@@ -1652,6 +1721,15 @@ Requirements:
             showToast(`ATS Score Boosted to ${state.lastAnalysis?.totalScore || 92}/100!`);
         }
 
+        function generateAllAiTools() {
+            generateBulletRewrites();
+            renderHumanizerScan();
+            renderAtsXray();
+            generateOutreachMaterials();
+            generateInterviewPrep();
+            showToast('Generated X-Y-Z Rewrites, Humanizer, Cover Letter & Interview Prep!');
+        }
+
         // Tab Switching
         function switchTab(tabId) {
             state.activeTab = tabId;
@@ -1674,6 +1752,10 @@ Requirements:
                 renderHumanizerScan();
             } else if (tabId === 'xray') {
                 renderAtsXray();
+            } else if (tabId === 'outreach') {
+                generateOutreachMaterials();
+            } else if (tabId === 'interview') {
+                generateInterviewPrep();
             }
         }
 
@@ -1717,29 +1799,40 @@ Requirements:
                 ? [state.uploadedTemplateProfile, ...RESUME_TEMPLATES]
                 : RESUME_TEMPLATES;
 
-            const filtered = pool.filter(t => {
-                const catOk = state.templateCategory === 'all' || t.cat === state.templateCategory;
-                const qOk = !query || t.name.toLowerCase().includes(query) || t.desc.toLowerCase().includes(query) || t.cat.includes(query);
-                return catOk && qOk;
+            const filtered = pool.filter(tpl => {
+                const catOk = state.templateCategory === 'all' || tpl.cat === state.templateCategory;
+                const searchOk = !query ||
+                    tpl.name.toLowerCase().includes(query) ||
+                    tpl.cat.toLowerCase().includes(query) ||
+                    tpl.layout.toLowerCase().includes(query) ||
+                    tpl.desc.toLowerCase().includes(query);
+                return catOk && searchOk;
             });
 
-            grid.innerHTML = filtered.map(t => {
-                const active = t.id === state.selectedTemplate;
-                const isUploaded = t.id === 'uploaded-original';
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center py-6 text-xs text-slate-400">No matching templates found.</div>';
+                return;
+            }
+
+            grid.innerHTML = filtered.map(tpl => {
+                const active = state.selectedTemplate === tpl.id;
+                const isUploaded = tpl.id === 'uploaded-original';
                 return `
-                    <button type="button" onclick="selectTemplate('${t.id}')"
-                        class="text-left p-2.5 rounded-xl border ${active ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600' : isUploaded ? 'border-emerald-300 bg-emerald-50/50 hover:border-emerald-400' : 'border-slate-200 bg-white hover:border-slate-300'} transition cursor-pointer">
+                    <button type="button" onclick="selectTemplate('${escapeHtml(tpl.id)}')"
+                        class="text-left p-2.5 rounded-xl border transition cursor-pointer ${active
+                            ? 'bg-indigo-50 border-indigo-500 ring-1 ring-indigo-500'
+                            : (isUploaded ? 'bg-emerald-50/70 border-emerald-300 hover:border-emerald-500' : 'bg-white border-slate-200 hover:border-slate-300')}">
                         <div class="flex items-center justify-between gap-1">
-                            <span class="font-bold text-[11px] ${isUploaded ? 'text-emerald-900' : 'text-slate-900'} truncate">${escapeHtml(t.name)}</span>
-                            <span class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${isUploaded ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}">${escapeHtml(t.cat)}</span>
+                            <span class="font-bold text-[11.5px] text-slate-900 truncate">${escapeHtml(tpl.name)}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${isUploaded ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}">${escapeHtml(tpl.cat)}</span>
                         </div>
-                        <p class="text-[10px] text-slate-500 mt-1 line-clamp-1">${escapeHtml(t.desc)}</p>
+                        <p class="text-[10px] text-slate-500 line-clamp-2 mt-1">${escapeHtml(tpl.desc)}</p>
                     </button>
                 `;
             }).join('');
         }
 
-        // Build HTML for the Formatted Resume Sheet
+        // Build HTML for the Formatted Resume Sheet across distinct visual archetypes
         function buildFormattedResumeHtml() {
             const raw = normalizeExtractedResumeText(document.getElementById('resume-text')?.value || '');
             const tpl = (state.selectedTemplate === 'uploaded-original' && state.uploadedTemplateProfile)
@@ -1748,6 +1841,7 @@ Requirements:
             const accent = state.accentColor || '#0f172a';
             const fontClass = tpl.font === 'serif' ? 'font-serif-resume' : '';
             const alignClass = tpl.headerAlign === 'left' ? 'text-left' : 'text-center';
+            const isCompact = tpl.layout === 'compact';
 
             const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) {
@@ -1761,15 +1855,22 @@ Requirements:
             let headerHtml = '';
             if (tpl.layout === 'banner') {
                 headerHtml = `
-                    <div class="rounded-lg p-4 mb-4 text-white" style="background-color: ${accent};">
+                    <div class="rounded-xl p-4 mb-4 text-white shadow-2xs" style="background: linear-gradient(135deg, ${accent}, ${accent}dd);">
                         <h1 class="text-xl font-extrabold tracking-tight">${escapeHtml(nameLine)}</h1>
                         ${contactLine ? `<p class="text-[11px] text-white/90 mt-1">${escapeHtml(contactLine)}</p>` : ''}
                     </div>
                 `;
+            } else if (tpl.layout === 'left-accent') {
+                headerHtml = `
+                    <div class="text-left pl-3.5 py-1 mb-4 border-l-4" style="border-color: ${accent};">
+                        <h1 class="text-xl font-extrabold tracking-tight text-slate-900">${escapeHtml(nameLine)}</h1>
+                        ${contactLine ? `<p class="text-[11px] text-slate-600 mt-1">${escapeHtml(contactLine)}</p>` : ''}
+                    </div>
+                `;
             } else {
                 headerHtml = `
-                    <div class="${alignClass} pb-2.5 mb-3 border-b-2" style="border-color: ${accent};">
-                        <h1 class="text-xl font-extrabold tracking-tight text-slate-900">${escapeHtml(nameLine)}</h1>
+                    <div class="${alignClass} ${isCompact ? 'pb-1.5 mb-2' : 'pb-2.5 mb-3.5'} border-b-2" style="border-color: ${accent};">
+                        <h1 class="${isCompact ? 'text-lg' : 'text-xl'} font-extrabold tracking-tight text-slate-900">${escapeHtml(nameLine)}</h1>
                         ${contactLine ? `<p class="text-[11px] text-slate-600 mt-1">${escapeHtml(contactLine)}</p>` : ''}
                     </div>
                 `;
@@ -1791,28 +1892,42 @@ Requirements:
             if (currentSec.title || currentSec.items.length) sections.push(currentSec);
 
             const renderSectionBlock = (sec) => {
+                const isSkillsSec = /SKILLS|COMPETENCIES/i.test(sec.title);
                 const heading = sec.title
-                    ? `<h2 class="text-xs font-extrabold uppercase tracking-wider pb-0.5 mb-1.5 border-b" style="color: ${accent}; border-color: ${accent}33;">${escapeHtml(sec.title)}</h2>`
+                    ? (tpl.layout === 'card-blocks'
+                        ? `<div class="inline-block px-2.5 py-0.5 rounded-md text-[10.5px] font-extrabold uppercase tracking-wider mb-2 text-white" style="background-color: ${accent};">${escapeHtml(sec.title)}</div>`
+                        : `<h2 class="${isCompact ? 'text-[11px] mb-1' : 'text-xs mb-1.5'} font-extrabold uppercase tracking-wider pb-0.5 border-b" style="color: ${accent}; border-color: ${accent}33;">${escapeHtml(sec.title)}</h2>`)
                     : '';
+
                 const body = sec.items.map(item => {
                     if (/^[-•*]\s+/.test(item)) {
-                        return `<div class="flex items-start gap-2 text-[11.5px] leading-relaxed text-slate-800 pl-1.5 mb-1"><span class="font-bold" style="color:${accent}">•</span><span>${escapeHtml(item.replace(/^[-•*]\s+/, ''))}</span></div>`;
+                        const cleanBullet = item.replace(/^[-•*]\s+/, '');
+                        return `<div class="flex items-start gap-2 ${isCompact ? 'text-[11px] mb-0.5 leading-snug' : 'text-[11.5px] mb-1 leading-relaxed'} text-slate-800 pl-1.5"><span class="font-bold shrink-0" style="color:${accent}">•</span><span class="break-words">${escapeHtml(cleanBullet)}</span></div>`;
                     }
                     const colonIdx = item.indexOf(':');
-                    if (colonIdx > 2 && colonIdx < 34 && !item.includes('|')) {
+                    if (colonIdx > 2 && colonIdx < 36 && !item.includes('|')) {
                         const label = item.slice(0, colonIdx + 1);
-                        const rest = item.slice(colonIdx + 1);
-                        return `<p class="text-[11.5px] leading-relaxed text-slate-800 mb-1"><strong class="font-bold text-slate-900">${escapeHtml(label)}</strong>${escapeHtml(rest)}</p>`;
+                        const rest = item.slice(colonIdx + 1).trim();
+                        if (isSkillsSec && tpl.layout === 'pill-skills' && rest.includes(',')) {
+                            const pills = rest.split(',').map(s => s.trim()).filter(Boolean)
+                                .map(s => `<span class="inline-block px-2 py-0.5 rounded-md text-[10.5px] font-medium bg-slate-100 text-slate-800 border border-slate-200/80">${escapeHtml(s)}</span>`).join(' ');
+                            return `<div class="mb-1.5"><strong class="text-[11.5px] font-bold text-slate-900 block mb-1">${escapeHtml(label)}</strong><div class="flex flex-wrap gap-1">${pills}</div></div>`;
+                        }
+                        return `<p class="${isCompact ? 'text-[11px] mb-0.5 leading-snug' : 'text-[11.5px] mb-1 leading-relaxed'} text-slate-800"><strong class="font-bold text-slate-900">${escapeHtml(label)}</strong> ${escapeHtml(rest)}</p>`;
                     }
                     if (item.includes('|')) {
                         const parts = item.split('|');
                         const left = parts.slice(0, -1).join('|').trim();
                         const right = parts[parts.length - 1].trim();
-                        return `<div class="flex flex-wrap items-baseline justify-between gap-2 text-[12px] font-bold text-slate-900 mt-1.5 mb-0.5"><span>${escapeHtml(left)}</span><span class="text-[11px] font-semibold text-slate-600">${escapeHtml(right)}</span></div>`;
+                        return `<div class="flex flex-wrap items-baseline justify-between gap-2 ${isCompact ? 'text-[11.5px] mt-1' : 'text-[12px] mt-1.5'} font-bold text-slate-900 mb-0.5"><span>${escapeHtml(left)}</span><span class="text-[11px] font-semibold text-slate-600">${escapeHtml(right)}</span></div>`;
                     }
-                    return `<p class="text-[11.5px] leading-relaxed text-slate-800 mb-1">${escapeHtml(item)}</p>`;
+                    return `<p class="${isCompact ? 'text-[11px] mb-0.5 leading-snug' : 'text-[11.5px] mb-1 leading-relaxed'} text-slate-800">${escapeHtml(item)}</p>`;
                 }).join('');
-                return `<div class="mb-3">${heading}${body}</div>`;
+
+                const cardWrap = tpl.layout === 'card-blocks'
+                    ? 'p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 mb-3'
+                    : (isCompact ? 'mb-2' : 'mb-3');
+                return `<div class="${cardWrap}">${heading}${body}</div>`;
             };
 
             if (tpl.layout === 'sidebar') {
@@ -1823,7 +1938,7 @@ Requirements:
                         ${headerHtml}
                         <div class="grid grid-cols-1 sm:grid-cols-12 gap-5">
                             <div class="sm:col-span-8">${mainSecs.map(renderSectionBlock).join('')}</div>
-                            <div class="sm:col-span-4 bg-slate-50/90 p-3 rounded-lg border border-slate-200/70">${sideSecs.map(renderSectionBlock).join('')}</div>
+                            <div class="sm:col-span-4 bg-slate-50/90 p-3.5 rounded-xl border border-slate-200/80">${sideSecs.map(renderSectionBlock).join('')}</div>
                         </div>
                     </div>
                 `;
@@ -2040,7 +2155,10 @@ Requirements:
                 AI_CLICHE_MAP.forEach(c => { c.pattern.lastIndex = 0; });
                 if (hits.length > 0) {
                     let rewritten = line;
-                    AI_CLICHE_MAP.forEach(c => { rewritten = rewritten.replace(c.pattern, c.replacement); });
+                    AI_CLICHE_MAP.forEach(c => {
+                        rewritten = rewritten.replace(c.pattern, c.replacement);
+                        c.pattern.lastIndex = 0;
+                    });
                     flagged.push({ original: line, rewritten, hits });
                 }
             });
@@ -2071,7 +2189,10 @@ Requirements:
             const area = document.getElementById('resume-text');
             if (!area) return;
             let text = area.value;
-            AI_CLICHE_MAP.forEach(c => { text = text.replace(c.pattern, c.replacement); });
+            AI_CLICHE_MAP.forEach(c => {
+                text = text.replace(c.pattern, c.replacement);
+                c.pattern.lastIndex = 0;
+            });
             updateResumeText(text, true);
             renderHumanizerScan();
             showToast('Removed AI clichés — your resume now reads naturally!');
@@ -2121,51 +2242,65 @@ Requirements:
             const out = document.getElementById('interview-results');
             if (!out) return;
             const skills = (state.lastAnalysis?.detectedSkills || ['Python', 'Linux', 'AWS', 'SQL']).slice(0, 4);
-            const questions = [
+            const s1 = skills[0] || 'Python';
+            const s2 = skills[1] || 'Linux';
+            const s3 = skills[2] || 'Cloud';
+
+            const qaList = [
                 {
-                    q: `Walk me through the architecture of your most challenging project involving ${skills[0] || 'your core stack'}.`,
-                    star: `Situation: Define the problem and scale. Task: Explain your ownership. Action: Detail the exact ${skills[0] || 'technical'} design trade-offs you made. Result: Cite concrete latency, uptime, or accuracy numbers.`
+                    q: `1. Walk me through a hands-on project or lab where you used ${s1} to solve a practical problem.`,
+                    s: `Set up a realistic test environment or workload in ${s1} where manual steps or bottlenecks slowed visibility.`,
+                    t: `Design a repeatable, measurable solution and verify its reliability under load or edge cases.`,
+                    a: `Built the implementation cleanly, logged metrics/telemetry, and iterated until latency and accuracy improved.`,
+                    r: `Quantified the outcome (e.g., reduced turnaround time by ~35–40% with reproducible documentation).`
                 },
                 {
-                    q: `How do you debug an intermittent failure or bottleneck in a ${skills[1] || 'Linux/cloud'} environment?`,
-                    star: `Situation: Describe a real bug or alert spike. Task: Isolate root cause without downtime. Action: Walk through logs, metrics, and hypothesis testing. Result: Share how you permanently prevented recurrence.`
+                    q: `2. How do you debug an unexpected failure or bottleneck when working with ${s2} or ${s3}?`,
+                    s: `A service or pipeline behaves inconsistently across environments or simulated traffic.`,
+                    t: `Isolate variables systematically without guessing or changing multiple configs at once.`,
+                    a: `Checked logs, network/resource boundaries, and recent diffs first, reproduced the issue in isolation, and applied a targeted fix.`,
+                    r: `Restored stability quickly and added checks/alerts so regressions are caught earlier.`
                 },
                 {
-                    q: `Tell me about a time you automated a repetitive manual workflow.`,
-                    star: `Situation: Identify the manual bottleneck. Task: Build a repeatable script or pipeline. Action: Explain the tooling and edge-case handling. Result: Quantify hours saved or error reduction.`
+                    q: `3. Tell me about a technical tradeoff you made—such as speed vs. simplicity or coverage vs. noise.`,
+                    s: `Building a project or automation workflow under time constraints with competing priorities.`,
+                    t: `Deliver a working, high-signal solution first without over-engineering premature complexity.`,
+                    a: `Scoped v1 to core requirements and measurable impact, then documented follow-up enhancements.`,
+                    r: `Shipped on schedule and achieved strong practical results.`
                 },
                 {
-                    q: `How do you prioritize security, reliability, and speed when shipping under a tight deadline?`,
-                    star: `Situation: Tight project milestone. Task: Deliver core functionality safely. Action: Explain testing, least-privilege defaults, and incremental rollout. Result: Delivered on time with zero regressions.`
+                    q: `4. How do you validate your work and prevent bugs or false positives before calling a task done?`,
+                    s: `Completing code, queries, rules, or infrastructure configurations that others will rely on.`,
+                    t: `Ensure edge cases, malformed inputs, and failure modes are tested explicitly.`,
+                    a: `Ran targeted test cases, inspected edge-case outputs, and verified cleanup/rollback safety.`,
+                    r: `Caught subtle issues before demo/review and kept execution dependable.`
                 },
                 {
-                    q: `What is one technical mistake you made in a recent project, and how did you fix it?`,
-                    star: `Situation: Initial design assumption that fell short. Task: Refactor cleanly. Action: Describe what telemetry revealed and how you redesigned it. Result: Measurable performance or reliability gain.`
+                    q: `5. How do you ramp up quickly on an unfamiliar tool, codebase, or domain concept?`,
+                    s: `Starting an internship or project that requires learning new tooling on the fly.`,
+                    t: `Build mental models fast and produce small working prototypes early.`,
+                    a: `Read official docs, set up a minimal local sandbox, and asked focused questions after trying first.`,
+                    r: `Contributed working features/analyses rapidly while building lasting fundamentals.`
                 }
             ];
 
-            out.innerHTML = questions.map((item, i) => `
-                <details class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 group" ${i === 0 ? 'open' : ''}>
+            out.innerHTML = qaList.map((item, idx) => `
+                <details ${idx === 0 ? 'open' : ''} class="rounded-xl bg-slate-50 border border-slate-200 p-3.5">
                     <summary class="font-bold text-xs text-slate-900 cursor-pointer list-none flex items-center justify-between gap-2">
-                        <span>Q${i + 1}. ${escapeHtml(item.q)}</span>
-                        <span class="text-[10px] font-bold text-indigo-600 shrink-0">STAR Blueprint ▾</span>
+                        <span>${escapeHtml(item.q)}</span>
+                        <span class="text-[10px] font-bold text-indigo-600 shrink-0">STAR Guide</span>
                     </summary>
-                    <p class="text-xs text-slate-600 mt-2.5 pt-2.5 border-t border-slate-200/80 leading-relaxed">${escapeHtml(item.star)}</p>
+                    <div class="mt-2.5 pt-2.5 border-t border-slate-200/80 space-y-1.5 text-[11.5px] text-slate-700 leading-relaxed">
+                        <div><strong class="text-slate-900">Situation:</strong> ${escapeHtml(item.s)}</div>
+                        <div><strong class="text-slate-900">Task:</strong> ${escapeHtml(item.t)}</div>
+                        <div><strong class="text-slate-900">Action:</strong> ${escapeHtml(item.a)}</div>
+                        <div><strong class="text-emerald-800">Result:</strong> ${escapeHtml(item.r)}</div>
+                    </div>
                 </details>
             `).join('');
         }
 
-        function generateAllAiTools() {
-            runFullScan(false);
-            generateBulletRewrites();
-            renderHumanizerScan();
-            renderAtsXray();
-            generateOutreachMaterials();
-            generateInterviewPrep();
-            showToast('Generated X-Y-Z Rewrites, Cover Letter, X-Ray & STAR Prep!');
-        }
-
-        // Multi-Format Export Suite (.PDF, .DOCX, .TEX, .MD, .TXT)
+        // Multi-Format Export Suite (.PDF, .DOCX, .TEX, .MD, .TXT) + Editable PDF Modal
         function triggerFileDownload(filename, content, mimeType) {
             const blob = new Blob([content], { type: mimeType });
             const url = URL.createObjectURL(blob);
@@ -2179,9 +2314,67 @@ Requirements:
         }
 
         function exportCleanPdf() {
+            const modal = document.getElementById('pdf-export-modal');
+            const sheet = document.getElementById('pdf-editable-sheet');
+            const keepOrigBtn = document.getElementById('pdf-keep-original-btn');
+            if (keepOrigBtn) {
+                keepOrigBtn.classList.toggle('hidden', !state.uploadedTemplateProfile);
+            }
+            if (!modal || !sheet) {
+                const printArea = document.getElementById('printable-resume-area');
+                if (printArea) {
+                    printArea.innerHTML = buildFormattedResumeHtml();
+                    window.print();
+                }
+                return;
+            }
+            sheet.innerHTML = buildFormattedResumeHtml();
+            sheet.style.fontSize = '100%';
+            const scaleSel = document.getElementById('pdf-font-scale');
+            if (scaleSel) scaleSel.value = '100%';
+            modal.classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function keepOriginalTemplateInExport() {
+            if (!state.uploadedTemplateProfile) {
+                showToast('No uploaded document template detected yet.');
+                return;
+            }
+            selectUploadedTemplate(true);
+            const sheet = document.getElementById('pdf-editable-sheet');
+            if (sheet) {
+                sheet.innerHTML = buildFormattedResumeHtml();
+            }
+            showToast(`Locked "${state.uploadedTemplateProfile.name}" for editing & export!`);
+        }
+
+        function closePdfExportModal() {
+            document.getElementById('pdf-export-modal')?.classList.add('hidden');
+        }
+
+        function updatePdfModalScale() {
+            const sheet = document.getElementById('pdf-editable-sheet');
+            const scaleSel = document.getElementById('pdf-font-scale');
+            if (sheet && scaleSel) sheet.style.fontSize = scaleSel.value;
+        }
+
+        function syncPdfModalToResume() {
+            const sheet = document.getElementById('pdf-editable-sheet');
+            if (!sheet) return;
+            const cleaned = normalizeExtractedResumeText(sheet.innerText || '');
+            if (cleaned) {
+                updateResumeText(cleaned, true);
+                showToast('Synced your PDF sheet edits to the resume editor!');
+            }
+        }
+
+        function printFromPdfModal() {
+            const sheet = document.getElementById('pdf-editable-sheet');
             const printArea = document.getElementById('printable-resume-area');
-            if (!printArea) return;
-            printArea.innerHTML = buildFormattedResumeHtml();
+            if (!sheet || !printArea) return;
+            printArea.innerHTML = sheet.innerHTML;
+            printArea.style.fontSize = sheet.style.fontSize || '100%';
             window.print();
         }
 

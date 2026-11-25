@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GradATS — Free Student ATS Resume Checker & AI Optimizer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- PDF.js CDN for client-side PDF extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Mammoth.js CDN for client-side DOCX extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    }
+                }
+            }
+        };
+        // Configure PDF.js worker matching exact CDN 3.11.174
+        if (window.pdfjsLib) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+    </script>
+    <style>
+        /* Custom animations and print styles */
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.65; }
+        }
+        .animate-pulse-subtle {
+            animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .gauge-circle {
+            transition: stroke-dashoffset 1s cubic-bezier(0.22, 1, 0.36, 1), stroke 0.5s ease;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        /* Clean Harvard / Jake's-style Single-Column ATS Print Formatting (Prevents blank page 2) */
+        @media print {
+            @page {
+                margin: 0.5in;
+                size: letter portrait;
+            }
+            html, body {
+                height: auto !important;
+                overflow: visible !important;
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            #printable-resume-area {
+                display: block !important;
+                position: static !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                font-family: 'Times New Roman', Georgia, serif;
+                font-size: 10.5pt;
+                line-height: 1.35;
+                color: #000 !important;
+                background: #fff !important;
+            }
+            #printable-resume-area h1 {
+                font-size: 18pt;
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 2pt;
+                letter-spacing: 0.3pt;
+            }
+            #printable-resume-area .ats-contact-line {
+                text-align: center;
+                font-size: 9.5pt;
+                margin-bottom: 10pt;
+                color: #111;
+            }
+            #printable-resume-area .ats-section-header {
+                font-size: 11pt;
+                font-weight: bold;
+                text-transform: uppercase;
+                border-bottom: 1pt solid #000;
+                margin-top: 9pt;
+                margin-bottom: 4pt;
+                padding-bottom: 1pt;
+                letter-spacing: 0.5pt;
+                page-break-after: avoid;
+            }
+            #printable-resume-area .ats-bullet {
+                margin-left: 14pt;
+                text-indent: -9pt;
+                margin-bottom: 2pt;
+            }
+            #printable-resume-area .ats-line {
+                margin-bottom: 2pt;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-x-hidden">
+
+    <!-- Toast Notification Container (Replaces alert()) -->
+    <div id="toast-container" class="no-print fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
+
+    <!-- BYOK Gemini API Key Modal (For Public GitHub Pages Hosting) -->
+    <div id="api-key-modal" class="no-print hidden fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                        <i data-lucide="key-round" class="w-4 h-4"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-900 text-sm">AI Engine & Optional Free API Key</h3>
+                </div>
+                <button onclick="closeApiKeyModal()" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200/80 text-xs text-emerald-900 leading-relaxed">
+                    <strong>Works 100% Free Without a Key:</strong> GradATS includes a built-in deterministic <em>Instant Local AI Engine</em> that works offline and on GitHub Pages with zero setup.
+                </div>
+                <div>
+                    <label for="gemini-key-input" class="block text-xs font-bold text-slate-700 mb-1.5">
+                        Optional: Google AI Studio Gemini Key (for Live LLM Rewrites)
+                    </label>
+                    <input id="gemini-key-input" type="password" placeholder="AIzaSy..."
+                        class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500">
+                    <p class="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                        Stored strictly in your browser's <code class="bg-slate-100 px-1 rounded">localStorage</code> and sent only to <code class="bg-slate-100 px-1 rounded">generativelanguage.googleapis.com</code> via <code class="bg-slate-100 px-1 rounded">x-goog-api-key</code> header. Never uploaded to any third-party server.
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <button onclick="clearApiKey()" class="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer">
+                        Remove Key (Use Local AI)
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <button onclick="closeApiKeyModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+                            Cancel
+                        </button>
+                        <button onclick="saveApiKey()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition cursor-pointer">
+                            Save Key
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Printable Area (Hidden on screen, used for Harvard/Jake's-style Print-Ready ATS PDF export) -->
+    <div id="printable-resume-area" class="hidden"></div>
+
+    <!-- Top Navigation Bar -->
+    <header class="no-print sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-white font-bold shadow-sm shadow-indigo-200 flex-shrink-0">
+                    <i data-lucide="file-check-2" class="w-5 h-5"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                        <span class="font-extrabold text-lg tracking-tight text-slate-900">GradATS</span>
+                        <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 rounded-full whitespace-nowrap">100% Free</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 hidden md:block truncate">Client-side student ATS scanner, X-Y-Z rewriter & career kit</p>
+                </div>
+            </div>
+
+            <!-- Preset Role Pills & AI Engine Status Badge -->
+            <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-1 max-w-full">
+                <button onclick="loadPreset('swe')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/80 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="code-2" class="w-3.5 h-3.5 text-indigo-600"></i> SWE Intern
+                </button>
+                <button onclick="loadPreset('soc')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/80 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-emerald-600"></i> Cyber SOC
+                </button>
+                <button onclick="loadPreset('data')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 border border-slate-200/80 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-violet-600"></i> Data Analyst
+                </button>
+
+                <!-- AI Engine Status / BYOK Trigger -->
+                <button id="navbar-ai-status-btn" onclick="openApiKeyModal()" title="Configure optional free Gemini API key or use built-in Local AI"
+                    class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/80 transition whitespace-nowrap flex items-center gap-1.5 cursor-pointer">
+                    <span id="navbar-ai-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="navbar-ai-label">Local AI Ready</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="no-print max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+        <!-- Hero Banner -->
+        <div class="mb-6 bg-gradient-to-r from-indigo-950 via-indigo-900 to-violet-900 rounded-2xl p-5 sm:p-7 text-white shadow-lg shadow-indigo-950/15 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="max-w-2xl">
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 text-indigo-100 text-xs font-medium mb-2.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    100% Client-Side • Zero Data Uploaded • GitHub Pages Ready
+                </div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1.5">Beat Resume Bots & Land More Interviews.</h1>
+                <p class="text-indigo-100/90 text-sm sm:text-base leading-relaxed">
+                    Upload <strong>.PDF, .DOCX, or .TXT</strong>. Inspect your raw ATS parser X-ray, inject missing hard skills & domain concepts, rewrite bullets with Google's X-Y-Z formula, and generate tailored cover letters & mock interview prep.
+                </p>
+            </div>
+            <div class="flex flex-wrap sm:flex-nowrap gap-3 w-full md:w-auto">
+                <button onclick="runFullScan(true)" class="w-full sm:w-auto px-5 py-3.5 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-extrabold text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    Run Full AI Career Suite
+                </button>
+            </div>
+        </div>
+
+        <!-- Two-Column Responsive Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- LEFT COLUMN: Inputs & Live Versioned Editor (5 cols on lg) -->
+            <div class="lg:col-span-5 space-y-5 min-w-0">
+                
+                <!-- Card 1: Resume Input & Multi-Format Dropzone -->
+                <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                    <div class="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/70">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">1</span>
+                            <h2 class="font-bold text-slate-800 text-sm sm:text-base">Your Resume</h2>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <!-- Undo / Version History Button -->
+                            <button id="undo-btn" onclick="undoResumeChange()" disabled title="Revert last AI edit or keyword injection"
+                                class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center gap-1 cursor-pointer">
+                                <i data-lucide="undo-2" class="w-3.5 h-3.5"></i>
+                                <span id="history-count-label">Undo (0)</span>
+                            </button>
+                            <!-- Multi-format Upload Button -->
+                            <label for="file-upload" class="cursor-pointer px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition flex items-center gap-1.5 border border-indigo-200/60">
+                                <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                                PDF / DOCX / TXT
+                            </label>
+                            <input id="file-upload" type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleFileUpload(event)">
+                            <button onclick="resetAllStorage()" title="Clear text and wipe browser localStorage draft" class="px-2 py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer">Reset</button>
+                        </div>
+                    </div>
+
+                    <!-- Drag and drop helper banner -->
+                    <div id="drop-zone" class="p-4 transition-colors">
+                        <div id="upload-status" class="hidden mb-2.5 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-700 flex items-center justify-between gap-2">
+                            <span id="upload-filename" class="font-medium truncate">Extracting text...</span>
+                            <span id="upload-engine-tag" class="text-[10px] font-bold uppercase px-1.5 py-0.5 bg-white rounded flex-shrink-0">Local Parser</span>
+                        </div>
+                        <textarea id="resume-input" rows="13" 
+                            placeholder="Paste your resume text here, drag & drop a .pdf / .docx / .txt file, or click a Student Preset at the top..."
+                            class="w-full rounded-xl border border-slate-200 p-3.5 text-xs sm:text-sm font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition resize-y leading-relaxed"></textarea>
+                        <div class="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                            <span id="word-count-badge" class="font-medium">0 words • 0 chars • 0s read</span>
+                            <span class="flex items-center gap-1 text-emerald-700 font-medium"><i data-lucide="shield-check" class="w-3 h-3"></i> Auto-saved locally in browser</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Target Job Description -->
+                <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                    <div class="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">2</span>
+                            <h2 class="font-bold text-slate-800 text-sm sm:text-base">Target Job Description</h2>
+                        </div>
+                        <span class="text-[11px] font-medium text-slate-400">Tailors keywords, cover letter & prep</span>
+                    </div>
+                    <div class="p-4">
+                        <textarea id="jd-input" rows="7" 
+                            placeholder="Paste the internship or entry-level job description here to extract exact Hard Skills & Domain Concepts..."
+                            class="w-full rounded-xl border border-slate-200 p-3.5 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition resize-y leading-relaxed"></textarea>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button onclick="runFullScan(false)" class="w-full py-3.5 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm border border-slate-300 shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
+                        <i data-lucide="activity" class="w-4 h-4 text-indigo-600"></i>
+                        Instant ATS Rescan
+                    </button>
+                    <button id="ai-optimize-btn" onclick="runFullScan(true)" class="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-md shadow-indigo-200 transition flex items-center justify-center gap-2 cursor-pointer">
+                        <i data-lucide="wand-2" class="w-4 h-4"></i>
+                        <span>Generate AI Suite</span>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: Visual ATS Dashboard & 6-Tab Career Suite (7 cols on lg) -->
+            <div class="lg:col-span-7 space-y-6 min-w-0">
+
+                <!-- Score Overview & 4 Pillars Card -->
+                <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 sm:p-6">
+                    <div class="flex flex-col sm:flex-row items-center gap-6">
+                        
+                        <!-- Circular Animated Gauge + Pass Probability -->
+                        <div class="flex flex-col items-center flex-shrink-0">
+                            <div class="relative w-36 h-36 flex items-center justify-center">
+                                <svg class="w-36 h-36" viewBox="0 0 120 120">
+                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#f1f5f9" stroke-width="11"></circle>
+                                    <circle id="score-ring" class="gauge-circle" cx="60" cy="60" r="50" fill="none" stroke="#6366f1" stroke-width="11" stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="314.16"></circle>
+                                </svg>
+                                <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                    <span id="total-score-text" class="text-3xl font-extrabold tracking-tight text-slate-900">0</span>
+                                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">/ 100 ATS</span>
+                                </div>
+                            </div>
+                            <div id="pass-prob-pill" class="mt-2 px-3 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold">
+                                Pass Prob: --%
+                            </div>
+                        </div>
+
+                        <!-- Score Verdict & 4 Weighted Pillars -->
+                        <div class="flex-1 w-full min-w-0">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                <span id="score-badge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">Ready to Scan</span>
+                                <span id="score-delta" class="hidden text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full"></span>
+                            </div>
+                            <h3 id="score-headline" class="text-lg font-bold text-slate-900 mb-3">Paste a resume or pick a preset to analyze</h3>
+
+                            <!-- 4 Pillars Breakdown Bars -->
+                            <div class="space-y-2.5">
+                                <!-- Pillar 1: Keywords (40%) -->
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-700">1. Keyword & JD Alignment <span class="text-slate-400 font-normal">(40%)</span></span>
+                                        <span id="p1-score" class="text-slate-900">0/40</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="p1-bar" class="h-full bg-indigo-600 rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Pillar 2: Impact & Quantification (25%) -->
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-700">2. Quantified Impact & Verbs <span class="text-slate-400 font-normal">(25%)</span></span>
+                                        <span id="p2-score" class="text-slate-900">0/25</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="p2-bar" class="h-full bg-violet-600 rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Pillar 3: Student Structure & Hygiene (20%) -->
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-700">3. Student Structure & Hygiene <span class="text-slate-400 font-normal">(20%)</span></span>
+                                        <span id="p3-score" class="text-slate-900">0/20</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="p3-bar" class="h-full bg-sky-500 rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Pillar 4: Parsability & Length (15%) -->
+                                <div>
+                                    <div class="flex justify-between text-xs font-semibold mb-1">
+                                        <span class="text-slate-700">4. ATS Parsability & Length <span class="text-slate-400 font-normal">(15%)</span></span>
+                                        <span id="p4-score" class="text-slate-900">0/15</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="p4-bar" class="h-full bg-emerald-500 rounded-full transition-all duration-700" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Navigation Tabs for Results & 6-Tab Career Suite -->
+                <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                    <div class="border-b border-slate-200 px-3 sm:px-4 pt-3 flex items-center gap-1 overflow-x-auto bg-slate-50/80 max-w-full">
+                        <button onclick="switchTab('keywords')" id="tab-btn-keywords" class="tab-btn px-3 py-2.5 text-xs font-bold border-b-2 border-indigo-600 text-indigo-700 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="target" class="w-3.5 h-3.5"></i> Diagnostics & Keywords
+                        </button>
+                        <button onclick="switchTab('rewriter')" id="tab-btn-rewriter" class="tab-btn px-3 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> X-Y-Z Rewriter
+                        </button>
+                        <button onclick="switchTab('xray')" id="tab-btn-xray" class="tab-btn px-3 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="scan-line" class="w-3.5 h-3.5"></i> ATS Parser X-Ray
+                        </button>
+                        <button onclick="switchTab('outreach')" id="tab-btn-outreach" class="tab-btn px-3 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="mail" class="w-3.5 h-3.5"></i> Cover Letter & Email
+                        </button>
+                        <button onclick="switchTab('interview')" id="tab-btn-interview" class="tab-btn px-3 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i> Interview Prep
+                        </button>
+                        <button onclick="switchTab('preview')" id="tab-btn-preview" class="tab-btn px-3 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800 whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer flex-shrink-0">
+                            <i data-lucide="file-output" class="w-3.5 h-3.5"></i> Heatmap & PDF
+                        </button>
+                    </div>
+
+                    <!-- Shared AI Loading State Banner -->
+                    <div id="ai-loading-state" class="hidden m-5 p-6 rounded-xl bg-indigo-50/70 border border-indigo-100 text-center space-y-2.5">
+                        <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                        <p class="text-sm font-bold text-indigo-950 animate-pulse-subtle">Crafting X-Y-Z rewrites, cover letter, recruiter cold email & STAR interview prep...</p>
+                        <p class="text-xs text-indigo-700/80">Tailoring specifically to your student projects and target job description</p>
+                    </div>
+
+                    <!-- TAB 0 (Default Active): Diagnostics & Keywords (Hard Skills vs Domain Concepts) -->
+                    <div id="tab-panel-keywords" class="p-5 sm:p-6 space-y-6">
+                        
+                        <!-- Interactive Missing Keywords Injector (Categorized) -->
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <h4 class="text-sm font-bold text-slate-900">Missing High-Impact Keywords</h4>
+                                <span class="text-xs text-indigo-600 font-semibold">Click any pill to + Inject to Skills & rescan</span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <!-- Hard Skills & Tools -->
+                                <div class="p-3 rounded-xl bg-rose-50/50 border border-rose-100 min-w-0">
+                                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 block mb-2">Hard Skills & Tools Missing</span>
+                                    <div id="missing-hard-skills" class="flex flex-wrap gap-1.5 min-h-[28px]">
+                                        <span class="text-xs text-slate-400">Run scan to analyze...</span>
+                                    </div>
+                                </div>
+                                <!-- Domain Concepts & Methodologies -->
+                                <div class="p-3 rounded-xl bg-amber-50/50 border border-amber-100 min-w-0">
+                                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 block mb-2">Domain Concepts & Practices Missing</span>
+                                    <div id="missing-domain-concepts" class="flex flex-wrap gap-1.5 min-h-[28px]">
+                                        <span class="text-xs text-slate-400">Run scan to analyze...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Matched Keywords -->
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-900 mb-2">Matched Keywords Found in Resume</h4>
+                            <div id="matched-keywords-container" class="flex flex-wrap gap-1.5 min-h-[32px]">
+                                <span class="text-xs text-slate-400">None detected yet.</span>
+                            </div>
+                        </div>
+
+                        <!-- Prioritized Fix Checklist with Point Estimates -->
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-900 mb-2.5">Prioritized Student ATS Fix Checklist</h4>
+                            <div id="checklist-container" class="space-y-2.5">
+                                <div class="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-xs text-slate-500">
+                                    Your personalized diagnostic action items with estimated point gains will appear here.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 1: AI X-Y-Z Bullet Rewriter -->
+                    <div id="tab-panel-rewriter" class="hidden p-5 sm:p-6 space-y-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50/80 border border-indigo-100 rounded-xl p-3.5">
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h4 class="text-sm font-bold text-indigo-950">Google X-Y-Z Impact Rewriter</h4>
+                                    <span id="ai-engine-badge" class="px-2 py-0.5 rounded bg-white text-[10px] font-bold text-indigo-700 border border-indigo-200">Instant Local AI Mode</span>
+                                </div>
+                                <p class="text-xs text-indigo-800/80 mt-0.5">Formula: <span class="font-semibold">"Accomplished [X] as measured by [Y], by doing [Z]"</span></p>
+                            </div>
+                            <button onclick="applyAllFixes()" class="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition whitespace-nowrap cursor-pointer">
+                                ⚡ Apply All AI Upgrades
+                            </button>
+                        </div>
+
+                        <!-- Rewrites List -->
+                        <div id="rewrites-container" class="space-y-4">
+                            <div class="p-5 rounded-xl bg-slate-50 border border-slate-200/70 text-center text-xs text-slate-500">
+                                Click <strong>"Generate AI Suite"</strong> to rewrite weak passive bullets into quantified X-Y-Z achievements.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: Raw ATS Parser X-Ray View -->
+                    <div id="tab-panel-xray" class="hidden p-5 sm:p-6 space-y-4">
+                        <div class="bg-slate-900 text-slate-100 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <h4 class="text-sm font-bold flex items-center gap-2 text-emerald-400">
+                                    <i data-lucide="cpu" class="w-4 h-4"></i> Workday / Greenhouse / Lever Parser Simulation
+                                </h4>
+                                <p class="text-xs text-slate-400 mt-0.5">This is the exact structured JSON object extracted after stripping visual styling.</p>
+                            </div>
+                            <span class="px-2.5 py-1 rounded bg-slate-800 font-mono text-[11px] text-slate-300 border border-slate-700">UTF-8 Plain Extraction</span>
+                        </div>
+
+                        <div id="xray-container" class="space-y-3">
+                            <div class="p-4 rounded-xl bg-slate-50 text-xs text-slate-500">Run a scan to inspect parsed ATS fields.</div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: Tailored Cover Letter & Cold Recruiter Email -->
+                    <div id="tab-panel-outreach" class="hidden p-5 sm:p-6 space-y-5">
+                        <div class="flex flex-wrap items-center justify-between gap-2 bg-violet-50/80 border border-violet-100 rounded-xl p-3.5">
+                            <div>
+                                <h4 class="text-sm font-bold text-violet-950">Tailored Cover Letter & Recruiter Outreach</h4>
+                                <p class="text-xs text-violet-800/80">Grounded directly in your student projects and the target JD—zero generic fluff.</p>
+                            </div>
+                            <button onclick="runFullScan(true)" class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition cursor-pointer">
+                                Regenerate Outreach
+                            </button>
+                        </div>
+
+                        <!-- Cover Letter Card -->
+                        <div class="rounded-xl border border-slate-200 overflow-hidden">
+                            <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-800">3-Paragraph Tailored Cover Letter</span>
+                                <button onclick="copyElementText('cover-letter-output', 'Cover letter copied!')" class="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700 cursor-pointer">
+                                    Copy Cover Letter
+                                </button>
+                            </div>
+                            <textarea id="cover-letter-output" rows="9" placeholder="Click 'Generate AI Suite' to create your tailored student cover letter..." class="w-full p-4 text-xs sm:text-sm text-slate-800 leading-relaxed focus:outline-none"></textarea>
+                        </div>
+
+                        <!-- Cold Recruiter Email / LinkedIn Note Card -->
+                        <div class="rounded-xl border border-slate-200 overflow-hidden">
+                            <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-800">Recruiter / Hiring Manager Cold Email & LinkedIn Note</span>
+                                <button onclick="copyElementText('cold-email-output', 'Cold outreach copied!')" class="px-2.5 py-1 rounded bg-white hover:bg-slate-100 border border-slate-300 text-xs font-semibold text-slate-700 cursor-pointer">
+                                    Copy Outreach
+                                </button>
+                            </div>
+                            <textarea id="cold-email-output" rows="5" placeholder="Click 'Generate AI Suite' to draft a high-reply-rate cold outreach message..." class="w-full p-4 text-xs sm:text-sm text-slate-800 leading-relaxed focus:outline-none"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- TAB 4: JD-Specific Mock Interview Prep -->
+                    <div id="tab-panel-interview" class="hidden p-5 sm:p-6 space-y-4">
+                        <div class="bg-sky-50/80 border border-sky-100 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h4 class="text-sm font-bold text-sky-950">JD & Resume-Specific Mock Interview Prep</h4>
+                                <p class="text-xs text-sky-800/80">5 tailored technical & behavioral questions probing your projects and JD gaps, with STAR frameworks.</p>
+                            </div>
+                            <button onclick="runFullScan(true)" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition cursor-pointer">
+                                Refresh Questions
+                            </button>
+                        </div>
+
+                        <div id="interview-questions-container" class="space-y-3">
+                            <div class="p-5 rounded-xl bg-slate-50 border border-slate-200/70 text-center text-xs text-slate-500">
+                                Click <strong>"Generate AI Suite"</strong> to generate 5 tailored mock interview questions and STAR answer outlines.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 5: Line-by-Line Resume Heatmap & Clean Print-Ready PDF Builder -->
+                    <div id="tab-panel-preview" class="hidden p-5 sm:p-6 space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3 bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3.5">
+                            <div>
+                                <h4 class="text-sm font-bold text-emerald-950">Line-by-Line Heatmap & Harvard/Jake's PDF Builder</h4>
+                                <p class="text-xs text-emerald-800">Inspect line strength below or export a machine-readable single-column ATS PDF.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button onclick="applyAllFixes()" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition cursor-pointer">
+                                    ⚡ Apply All Fixes
+                                </button>
+                                <button onclick="copyOptimizedResume()" class="px-3 py-2 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold transition cursor-pointer">
+                                    Copy Text
+                                </button>
+                                <button onclick="downloadTxt()" class="px-3 py-2 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold transition cursor-pointer">
+                                    .TXT
+                                </button>
+                                <button onclick="printAtsPdf()" class="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+                                    <i data-lucide="printer" class="w-3.5 h-3.5"></i> Export Clean ATS PDF
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Heatmap Legend -->
+                        <div class="flex flex-wrap items-center gap-3 text-[11px] font-semibold px-1">
+                            <span class="flex items-center gap-1.5 text-emerald-800"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-200 border border-emerald-400"></span> Strong Quantified / Keyword Impact</span>
+                            <span class="flex items-center gap-1.5 text-amber-800"><span class="w-2.5 h-2.5 rounded-sm bg-amber-200 border border-amber-400"></span> Passive / Unquantified Bullet</span>
+                            <span class="flex items-center gap-1.5 text-indigo-800"><span class="w-2.5 h-2.5 rounded-sm bg-indigo-100 border border-indigo-300"></span> Section Header / Keyword Opportunity</span>
+                        </div>
+
+                        <!-- Interactive Visual Heatmap Container -->
+                        <div id="heatmap-container" class="rounded-xl border border-slate-200 bg-white p-4 font-mono text-xs space-y-1 max-h-[420px] overflow-y-auto leading-relaxed">
+                            <span class="text-slate-400">Run a scan to visualize line-by-line resume impact...</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="no-print max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 mt-8 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+        <p><strong>GradATS</strong> — 100% Client-Side • Zero Data Uploaded • Open-Source Ready for GitHub Pages.</p>
+        <p>Local PDF.js & Mammoth.js parsing • Google X-Y-Z Formula • Harvard/Jake's ATS Print Engine</p>
+    </footer>
+
+    <script>
+        /**
+         * ============================================================================
+         * 1. APPLICATION STATE, STORAGE KEYS, BYOK API KEY & STUDENT PRESETS
+         * ============================================================================
+         */
+        const STORAGE_KEYS = {
+            API_KEY: 'gradats_gemini_key',
+            RESUME_DRAFT: 'gradats_resume_draft',
+            JD_DRAFT: 'gradats_jd_draft'
+        };
+
+        let appState = {
+            lastScore: null,
+            currentAnalysis: null,
+            aiSuggestions: null,
+            historyStack: [] // Stores previous resume snapshots for Undo
+        };
+
+        // Safely resolve API key from Canvas runtime or user's localStorage BYOK
+        function getActiveGeminiKey() {
+            if (typeof window.__GEMINI_API_KEY__ === 'string' && window.__GEMINI_API_KEY__.trim()) {
+                return window.__GEMINI_API_KEY__.trim();
+            }
+            try {
+                return (localStorage.getItem(STORAGE_KEYS.API_KEY) || '').trim();
+            } catch (e) {
+                return '';
+            }
+        }
+
+        function updateNavbarAiStatus() {
+            const key = getActiveGeminiKey();
+            const dot = document.getElementById('navbar-ai-dot');
+            const label = document.getElementById('navbar-ai-label');
+            if (key) {
+                dot.className = 'w-2 h-2 rounded-full bg-indigo-600 animate-pulse';
+                label.textContent = 'Gemini AI Active';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-500';
+                label.textContent = 'Local AI Ready';
+            }
+        }
+
+        function openApiKeyModal() {
+            const modal = document.getElementById('api-key-modal');
+            const input = document.getElementById('gemini-key-input');
+            try {
+                input.value = localStorage.getItem(STORAGE_KEYS.API_KEY) || '';
+            } catch (e) {
+                input.value = '';
+            }
+            modal.classList.remove('hidden');
+            refreshIcons();
+        }
+
+        function closeApiKeyModal() {
+            document.getElementById('api-key-modal').classList.add('hidden');
+        }
+
+        function saveApiKey() {
+            const val = document.getElementById('gemini-key-input').value.trim();
+            try {
+                if (val) {
+                    localStorage.setItem(STORAGE_KEYS.API_KEY, val);
+                    showToast('Gemini API key saved locally in browser!', 'success');
+                } else {
+                    localStorage.removeItem(STORAGE_KEYS.API_KEY);
+                    showToast('Using built-in Instant Local AI Engine.', 'info');
+                }
+            } catch (e) {
+                showToast('Could not access localStorage in this browser context.', 'error');
+            }
+            updateNavbarAiStatus();
+            closeApiKeyModal();
+        }
+
+        function clearApiKey() {
+            try {
+                localStorage.removeItem(STORAGE_KEYS.API_KEY);
+            } catch (e) {}
+            document.getElementById('gemini-key-input').value = '';
+            updateNavbarAiStatus();
+            closeApiKeyModal();
+            showToast('Removed API key. Switched to Instant Local AI Mode.', 'info');
+        }
+
+        // Realistic Student Presets
+        const PRESETS = {
+            swe: {
+                resume: `Alex Rivera
+alex.rivera@university.edu | (555) 234-5678 | github.com/alexrivera
+
+EDUCATION
+State University — B.S. in Computer Science (Expected May 2027)
+GPA: 3.7/4.0 | Relevant Coursework: Data Structures, Algorithms, Operating Systems, Databases
+
+SKILLS
+Languages: Python, Java, JavaScript, HTML, CSS, C++
+Tools: Git, VS Code, Linux
+
+PROJECTS
+Campus Study Group Finder
+- Worked on a web application for students to find study partners on campus.
+- Responsible for building the frontend pages and connecting to a backend database.
+- Helped students filter classes and message each other.
+
+Weather Dashboard App
+- Built a weather app using a public API to show forecasts.
+- Used JavaScript and CSS to make the layout look good on phones.
+
+EXPERIENCE
+IT Helpdesk Student Assistant | University Tech Center (Sep 2025 - Present)
+- Responsible for helping students and faculty with laptop and Wi-Fi issues.
+- Worked on documenting common troubleshooting steps in the internal wiki.`,
+                jd: `Software Engineering Intern (Summer 2027)
+We are looking for a motivated Computer Science student to join our Core Platform Engineering team.
+Responsibilities:
+- Design, develop, and test scalable full-stack web services using React, TypeScript, Node.js, and Python.
+- Build RESTful APIs and optimize SQL/PostgreSQL database queries for low latency.
+- Collaborate in an Agile/Scrum environment using Git, CI/CD pipelines, Docker, and AWS.
+- Write unit tests and participate in code reviews to ensure high software quality.
+Qualifications:
+- Pursuing a B.S. or M.S. in Computer Science or related field.
+- Strong foundation in data structures, algorithms, and object-oriented programming.
+- Experience with React, Node.js, REST APIs, SQL, Docker, or cloud platforms (AWS/GCP).`
+            },
+            soc: {
+                resume: `Jordan Taylor
+jordan.taylor@college.edu | (555) 876-5432 | linkedin.com/in/jordantaylor
+
+EDUCATION
+Tech Institute of Technology — B.S. in Cybersecurity (Expected Dec 2026)
+Certifications: CompTIA Security+ (In Progress)
+
+SKILLS
+Security: Network Security, Wireshark, Nmap, Linux, Windows Server
+Scripting: Python, Bash
+
+PROJECTS
+Home Lab Intrusion Detection Setup
+- Set up a virtual machine lab to monitor network traffic and detect suspicious packets.
+- Responsible for configuring firewall rules and writing basic scripts to parse logs.
+- Analyzed malware samples in an isolated sandbox environment.
+
+Phishing Awareness Club Workshop
+- Helped organize a workshop teaching students how to spot phishing emails.
+- Created slides covering password managers and multi-factor authentication.
+
+EXPERIENCE
+Computer Lab Monitor | Tech Institute (Jan 2025 - Present)
+- Monitored lab computers and reported hardware or software issues to administrators.
+- Assisted students with login troubleshooting and basic software installation.`,
+                jd: `Cybersecurity SOC Analyst Intern
+Join our Security Operations Center (SOC) to defend enterprise infrastructure against emerging cyber threats.
+Responsibilities:
+- Monitor and triage security alerts using SIEM platforms (Splunk, Microsoft Sentinel) and EDR tools.
+- Conduct incident response, threat hunting, log analysis, and vulnerability scanning (Nessus, Qualys).
+- Investigate phishing campaigns, malware indicators (IOCs), and MITRE ATT&CK tactics.
+- Automate alert enrichment workflows using Python or PowerShell scripting.
+Qualifications:
+- Pursuing a degree in Cybersecurity, Information Security, or Computer Science.
+- Familiarity with TCP/IP networking, SIEM, Splunk, Incident Response, MITRE ATT&CK, Vulnerability Management, and Linux/Windows logs.`
+            },
+            data: {
+                resume: `Priya Patel
+priya.patel@stateu.edu | (555) 345-6789 | linkedin.com/in/priyapatel
+
+EDUCATION
+Metro State University — B.S. in Data Science & Statistics (Expected May 2027)
+GPA: 3.85/4.0
+
+SKILLS
+Languages: Python, R, SQL
+Tools: Excel, Jupyter Notebook, Pandas
+
+PROJECTS
+Retail Sales Trend Analysis
+- Analyzed a dataset of retail store transactions to find seasonal buying patterns.
+- Responsible for cleaning missing data and making charts to show monthly revenue.
+- Presented findings to classmates at the end of the semester.
+
+Movie Recommendation Engine
+- Worked on a collaborative filtering script in Python to recommend movies based on user ratings.
+- Tested different similarity metrics to see which worked better.
+
+EXPERIENCE
+Tutor — Intro to Statistics | University Learning Center (Aug 2025 - Present)
+- Tutored undergraduate students in probability, hypothesis testing, and regression.
+- Helped students prepare for midterm and final exams.`,
+                jd: `Data Analyst Intern — Product Analytics
+We are seeking an analytical Data Analyst Intern to turn user behavior data into actionable product insights.
+Responsibilities:
+- Write complex SQL queries to extract, transform, and analyze large datasets in Snowflake/BigQuery.
+- Build interactive KPI dashboards in Tableau or Power BI for product managers and stakeholders.
+- Perform statistical analysis, A/B testing, cohort retention analysis, and exploratory data analysis (EDA) in Python (Pandas, NumPy, Scikit-learn).
+- Communicate data-driven recommendations clearly to cross-functional teams.
+Qualifications:
+- Pursuing a degree in Data Science, Statistics, Economics, or Computer Science.
+- Proficiency in SQL, Python, Tableau/Power BI, Excel, A/B testing, and data visualization.`
+            }
+        };
+
+        /**
+         * ============================================================================
+         * 2. XSS ESCAPING, LOCALSTORAGE PERSISTENCE & MULTI-FORMAT FILE PARSING
+         * ============================================================================
+         */
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function refreshIcons() {
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-900 text-white border-emerald-700',
+                error: 'bg-rose-900 text-white border-rose-700',
+                info: 'bg-slate-900 text-white border-slate-700'
+            };
+            toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-lg text-xs font-semibold flex items-center gap-2 transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3400);
+        }
+
+        function persistDraftsToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEYS.RESUME_DRAFT, document.getElementById('resume-input').value);
+                localStorage.setItem(STORAGE_KEYS.JD_DRAFT, document.getElementById('jd-input').value);
+            } catch (e) {}
+        }
+
+        // Version History Stack Management with Deduplication
+        function pushHistorySnapshot(currentText) {
+            const normalized = (currentText || '').trim();
+            if (!normalized) return;
+            const stack = appState.historyStack;
+            if (stack.length === 0 || stack[stack.length - 1].trim() !== normalized) {
+                stack.push(currentText);
+                if (stack.length > 25) stack.shift();
+            }
+            updateUndoButton();
+        }
+
+        function updateUndoButton() {
+            const btn = document.getElementById('undo-btn');
+            const label = document.getElementById('history-count-label');
+            const count = appState.historyStack.length;
+            btn.disabled = count === 0;
+            label.textContent = `Undo (${count})`;
+        }
+
+        function undoResumeChange() {
+            if (appState.historyStack.length === 0) return;
+            const previousText = appState.historyStack.pop();
+            document.getElementById('resume-input').value = previousText;
+            persistDraftsToStorage();
+            updateUndoButton();
+            updateLiveStats();
+            showToast('Reverted to previous resume version!', 'info');
+            runFullScan(false);
+        }
+
+        function switchTab(tabName) {
+            const tabs = ['keywords', 'rewriter', 'xray', 'outreach', 'interview', 'preview'];
+            tabs.forEach(t => {
+                const panel = document.getElementById(`tab-panel-${t}`);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (!panel || !btn) return;
+                if (t === tabName) {
+                    panel.classList.remove('hidden');
+                    btn.classList.add('border-indigo-600', 'text-indigo-700', 'font-bold');
+                    btn.classList.remove('border-transparent', 'text-slate-500', 'font-semibold');
+                } else {
+                    panel.classList.add('hidden');
+                    btn.classList.remove('border-indigo-600', 'text-indigo-700', 'font-bold');
+                    btn.classList.add('border-transparent', 'text-slate-500', 'font-semibold');
+                }
+            });
+        }
+
+        function updateLiveStats() {
+            const text = document.getElementById('resume-input').value;
+            const trimmed = text.trim();
+            const words = trimmed ? trimmed.split(/\s+/).length : 0;
+            const chars = text.length;
+            const readSec = Math.max(1, Math.round((words / 220) * 60));
+            document.getElementById('word-count-badge').textContent = `${words} words • ${chars} chars • ~${readSec}s recruiter skim`;
+            persistDraftsToStorage();
+        }
+
+        document.getElementById('resume-input').addEventListener('input', updateLiveStats);
+        document.getElementById('jd-input').addEventListener('input', persistDraftsToStorage);
+
+        function loadPreset(key) {
+            const preset = PRESETS[key];
+            if (!preset) return;
+            appState.lastScore = null;
+            appState.aiSuggestions = null;
+            appState.historyStack = [];
+            updateUndoButton();
+            document.getElementById('resume-input').value = preset.resume;
+            document.getElementById('jd-input').value = preset.jd;
+            document.getElementById('upload-status').classList.add('hidden');
+            updateLiveStats();
+            showToast(`Loaded ${key.toUpperCase()} Student Preset! Running ATS scan...`, 'info');
+            runFullScan(false);
+        }
+
+        function resetAllStorage() {
+            pushHistorySnapshot(document.getElementById('resume-input').value);
+            document.getElementById('resume-input').value = '';
+            document.getElementById('jd-input').value = '';
+            document.getElementById('upload-status').classList.add('hidden');
+            try {
+                localStorage.removeItem(STORAGE_KEYS.RESUME_DRAFT);
+                localStorage.removeItem(STORAGE_KEYS.JD_DRAFT);
+            } catch (e) {}
+            appState.lastScore = null;
+            appState.aiSuggestions = null;
+            updateLiveStats();
+            showToast('Cleared workspace & browser draft (click Undo to restore text).', 'info');
+        }
+
+        // Handle .PDF (PDF.js 3.11.174), .DOCX (Mammoth.js), and .TXT uploads locally
+        async function handleFileUpload(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+
+            const statusEl = document.getElementById('upload-status');
+            const filenameEl = document.getElementById('upload-filename');
+            const engineTagEl = document.getElementById('upload-engine-tag');
+            statusEl.classList.remove('hidden');
+            filenameEl.textContent = `Parsing "${file.name}"...`;
+
+            pushHistorySnapshot(document.getElementById('resume-input').value);
+
+            try {
+                const lowerName = file.name.toLowerCase();
+
+                if (file.type === 'text/plain' || lowerName.endsWith('.txt')) {
+                    const text = await file.text();
+                    if (!text.trim()) throw new Error('EMPTY_FILE');
+                    document.getElementById('resume-input').value = text;
+                    filenameEl.textContent = `Loaded: ${file.name}`;
+                    engineTagEl.textContent = 'Plain Text';
+                    updateLiveStats();
+                    showToast('Resume text loaded! Scanning now...', 'success');
+                    runFullScan(false);
+
+                } else if (lowerName.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                    if (typeof window.mammoth === 'undefined') {
+                        throw new Error('MAMMOTH_UNAVAILABLE');
+                    }
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await window.mammoth.extractRawText({ arrayBuffer });
+                    const extracted = (result.value || '').trim();
+                    if (!extracted) throw new Error('EMPTY_DOCX');
+                    document.getElementById('resume-input').value = extracted;
+                    filenameEl.textContent = `Extracted DOCX: ${file.name}`;
+                    engineTagEl.textContent = 'Mammoth.js DOCX';
+                    updateLiveStats();
+                    showToast('Word (.DOCX) resume parsed cleanly! Scanning...', 'success');
+                    runFullScan(false);
+
+                } else if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
+                    if (typeof window.pdfjsLib === 'undefined') {
+                        throw new Error('PDFJS_UNAVAILABLE');
+                    }
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    const arrayBuffer = await file.arrayBuffer();
+                    const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+                    const pdf = await loadingTask.promise;
+                    let fullText = '';
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        const page = await pdf.getPage(pageNum);
+                        const content = await page.getTextContent();
+                        let lastY = null;
+                        let pageText = '';
+                        for (const item of content.items) {
+                            if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
+                                pageText += '\n';
+                            } else if (pageText.length > 0 && !pageText.endsWith('\n') && !pageText.endsWith(' ')) {
+                                pageText += ' ';
+                            }
+                            pageText += item.str;
+                            lastY = item.transform[5];
+                        }
+                        fullText += pageText + '\n\n';
+                    }
+                    const trimmedPdf = fullText.trim();
+                    if (!trimmedPdf) {
+                        throw new Error('SCANNED_OR_EMPTY_PDF');
+                    }
+                    document.getElementById('resume-input').value = trimmedPdf;
+                    filenameEl.textContent = `Extracted ${pdf.numPages} page(s) from ${file.name}`;
+                    engineTagEl.textContent = 'PDF.js Local';
+                    updateLiveStats();
+                    showToast('PDF extracted cleanly! Running ATS scan...', 'success');
+                    runFullScan(false);
+
+                } else {
+                    showToast('Unsupported format. Please upload a .PDF, .DOCX, or .TXT file.', 'error');
+                    statusEl.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('Resume File Parse Error:', err);
+                const msg = String(err?.message || err);
+                if (err?.name === 'PasswordException' || msg.includes('Password')) {
+                    showToast('This PDF is password-protected. Please unlock it or paste text directly.', 'error');
+                    filenameEl.textContent = 'Password-protected PDF — please paste text.';
+                } else if (msg === 'SCANNED_OR_EMPTY_PDF') {
+                    showToast('No selectable text found (likely a scanned image PDF). Export a text-based PDF or paste text.', 'error');
+                    filenameEl.textContent = 'Image-only PDF detected — paste text directly.';
+                } else if (msg === 'EMPTY_DOCX' || msg === 'EMPTY_FILE') {
+                    showToast('The uploaded file appears empty. Please check the file or paste text.', 'error');
+                    filenameEl.textContent = 'Empty document — paste text directly.';
+                } else {
+                    showToast('Could not parse file (corrupted or offline CDN). Please paste your resume text directly.', 'error');
+                    filenameEl.textContent = 'Extraction failed — please paste text directly.';
+                }
+            }
+            event.target.value = '';
+        }
+
+        // Drag and Drop support on the Resume textarea wrapper
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('bg-indigo-50/70');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('bg-indigo-50/70');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-indigo-50/70');
+            const file = e.dataTransfer?.files?.[0];
+            if (file) {
+                handleFileUpload({ target: { files: [file], value: '' } });
+            }
+        });
+
+        /**
+         * ============================================================================
+         * 3. CLIENT-SIDE 4-PILLAR ATS DIAGNOSTIC ENGINE (SPECIAL CHAR REGEX SAFE)
+         * ============================================================================
+         */
+        const HARD_SKILLS_LIST = [
+            'python', 'java', 'javascript', 'typescript', 'c++', 'c#', '.net', 'go', 'rust', 'sql', 'nosql',
+            'react', 'angular', 'vue', 'node.js', 'express', 'next.js', 'django', 'flask', 'spring boot',
+            'rest api', 'restful apis', 'graphql', 'html', 'css', 'tailwind', 'git', 'github', 'ci/cd',
+            'docker', 'kubernetes', 'aws', 'aws s3', 'azure', 'gcp', 'linux', 'postgresql', 'mongodb', 'mysql', 'redis',
+            'pandas', 'numpy', 'scikit-learn', 'tensorflow', 'pytorch', 'r', 'tableau', 'power bi',
+            'excel', 'snowflake', 'bigquery', 'siem', 'splunk', 'microsoft sentinel', 'edr',
+            'nessus', 'qualys', 'wireshark', 'nmap', 'powershell', 'bash', 'comptia security+'
+        ];
+
+        const DOMAIN_CONCEPTS_LIST = [
+            'agile', 'scrum', 'unit testing', 'data structures', 'algorithms', 'object-oriented',
+            'a/b testing', 'etl', 'data visualization', 'statistical analysis', 'eda',
+            'exploratory data analysis', 'regression', 'machine learning', 'kpi', 'cohort retention',
+            'incident response', 'threat hunting', 'log analysis', 'vulnerability scanning',
+            'mitre att&ck', 'tcp/ip', 'firewall', 'phishing', 'malware', 'network security',
+            'soc', 'ioc', 'vulnerability management', 'cross-functional', 'stakeholders',
+            'automation', 'optimization', 'code review', 'scalable'
+        ];
+
+        const STRONG_ACTION_VERBS = [
+            'engineered', 'architected', 'developed', 'built', 'automated', 'optimized', 'reduced',
+            'increased', 'accelerated', 'deployed', 'designed', 'implemented', 'spearheaded',
+            'analyzed', 'triaged', 'investigated', 'mitigated', 'streamlined', 'integrated',
+            'launched', 'migrated', 'refactored', 'evaluated', 'conducted', 'led', 'mentored', 'resolved'
+        ];
+
+        const WEAK_PASSIVE_PHRASES = [
+            'responsible for', 'worked on', 'helped with', 'helped', 'assisted with', 'assisted',
+            'duties included', 'participated in', 'tasked with', 'made', 'did', 'used'
+        ];
+
+        // Safe boundary matcher that handles C++, C#, .NET, Node.js, CI/CD, TCP/IP
+        function buildTechKeywordRegex(kw) {
+            const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`(?:^|[\\s,;|/()\\[\\]{}:'"<>])${escaped}(?=$|[\\s,;|/()\\[\\]{}:'"<>.!?])`, 'i');
+        }
+
+        function extractCategorizedJDKeywords(jdText) {
+            const lowerJD = jdText.toLowerCase();
+            if (!lowerJD.trim()) {
+                return {
+                    hardSkills: ['python', 'sql', 'git', 'linux', 'react', 'docker', 'aws'],
+                    domainConcepts: ['rest api', 'agile', 'unit testing', 'data structures', 'automation']
+                };
+            }
+
+            const hardSkills = new Set();
+            const domainConcepts = new Set();
+
+            for (const skill of HARD_SKILLS_LIST) {
+                if (buildTechKeywordRegex(skill).test(jdText)) hardSkills.add(skill);
+            }
+
+            for (const concept of DOMAIN_CONCEPTS_LIST) {
+                if (buildTechKeywordRegex(concept).test(jdText)) domainConcepts.add(concept);
+            }
+
+            // Extract uppercase tech acronyms from JD (including C++, C#, .NET)
+            const acronyms = jdText.match(/(?:^|\s)(\.?[A-Z][A-Za-z0-9+#/.]{1,14})(?=$|\s|[,.;:()])/g) || [];
+            const stopCaps = new Set(['We', 'The', 'Join', 'Our', 'Responsibilities', 'Qualifications', 'Summer', 'Intern', 'Internship', 'Pursuing', 'Strong', 'Experience', 'Familiarity', 'Proficiency', 'Build', 'Design', 'Perform', 'Write', 'Monitor', 'Conduct', 'Investigate', 'Automate', 'Communicate', 'Collaborate']);
+            for (const rawWord of acronyms) {
+                const word = rawWord.trim();
+                const lw = word.toLowerCase();
+                if (!stopCaps.has(word) && word.length >= 2 && !hardSkills.has(lw) && !domainConcepts.has(lw)) {
+                    hardSkills.add(lw);
+                }
+            }
+
+            return {
+                hardSkills: Array.from(hardSkills).slice(0, 12),
+                domainConcepts: Array.from(domainConcepts).slice(0, 10)
+            };
+        }
+
+        function analyzeResume(resumeText, jdText) {
+            const lowerResume = resumeText.toLowerCase();
+            const lines = resumeText.split('\n').map(l => l.trim()).filter(Boolean);
+            const bullets = lines.filter(l => /^[-•*▪]/.test(l));
+            const words = resumeText.trim() ? resumeText.trim().split(/\s+/) : [];
+            const wordCount = words.length;
+
+            // PILLAR 1: Keyword & JD Alignment (Max 40 pts)
+            const { hardSkills, domainConcepts } = extractCategorizedJDKeywords(jdText);
+            const matchedKeywords = [];
+            const missingHardSkills = [];
+            const missingDomainConcepts = [];
+
+            const checkMatch = (kw) => buildTechKeywordRegex(kw).test(resumeText);
+
+            hardSkills.forEach(kw => {
+                if (checkMatch(kw)) matchedKeywords.push(kw);
+                else missingHardSkills.push(kw);
+            });
+
+            domainConcepts.forEach(kw => {
+                if (checkMatch(kw)) matchedKeywords.push(kw);
+                else missingDomainConcepts.push(kw);
+            });
+
+            const totalTargets = hardSkills.length + domainConcepts.length;
+            const matchRatio = totalTargets > 0 ? (matchedKeywords.length / totalTargets) : 0.5;
+            const pillar1Score = Math.min(40, Math.round(matchRatio * 40));
+
+            // PILLAR 2: Quantified Impact & Action Verbs (Max 25 pts)
+            let quantifiedBullets = 0;
+            let strongVerbBullets = 0;
+            const weakBulletsFound = [];
+
+            const metricRegex = /(\d+%|\$\d+|\d+\+|\d+x|\b\d+\s*(ms|sec|seconds|mins|minutes|hours|hrs|days|users|students|tickets|endpoints|datasets|records|pages|vulnerabilities|alerts)\b)/i;
+
+            bullets.forEach(b => {
+                const cleanB = b.replace(/^[-•*▪]\s*/, '');
+                const lowerB = cleanB.toLowerCase();
+                const hasMetric = metricRegex.test(cleanB);
+                if (hasMetric) quantifiedBullets++;
+
+                const firstWord = lowerB.split(/\s+/)[0]?.replace(/[^a-z]/g, '');
+                const startsStrong = STRONG_ACTION_VERBS.includes(firstWord);
+                if (startsStrong) strongVerbBullets++;
+
+                const hasWeakPhrase = WEAK_PASSIVE_PHRASES.some(wp => lowerB.startsWith(wp) || lowerB.includes(` ${wp} `));
+                if (!hasMetric || hasWeakPhrase || !startsStrong) {
+                    weakBulletsFound.push(cleanB);
+                }
+            });
+
+            const bulletTotal = Math.max(bullets.length, 1);
+            const quantRatio = Math.min(1, quantifiedBullets / Math.max(3, bulletTotal * 0.65));
+            const verbRatio = Math.min(1, strongVerbBullets / Math.max(3, bulletTotal * 0.75));
+            const pillar2Score = bullets.length === 0 ? 5 : Math.min(25, Math.round((quantRatio * 15) + (verbRatio * 10)));
+
+            // PILLAR 3: Student Structure & Contact Hygiene (Max 20 pts)
+            let pillar3Score = 0;
+            const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(resumeText);
+            const hasPhone = /(\+?\d{1,2}\s?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/.test(resumeText);
+            const hasLink = /(linkedin\.com|github\.com|portfolio|https?:\/\/)/i.test(resumeText);
+            const hasEducation = /\b(education|university|college|institute|b\.s\.|b\.a\.|bachelor|master)\b/i.test(resumeText);
+            const hasGpaOrGrad = /\b(gpa|expected|202[5-9]|2030|may|dec|graduat)\b/i.test(resumeText);
+            const hasSkills = /\b(skills|technologies|technical skills|languages|tools|frameworks)\b/i.test(resumeText);
+            const hasProjects = /\b(projects|academic projects|personal projects)\b/i.test(resumeText);
+            const hasExperience = /\b(experience|internship|work history|employment)\b/i.test(resumeText);
+
+            const eduIndex = lowerResume.search(/\b(education|university|college)\b/);
+            const eduNearTop = eduIndex !== -1 && eduIndex < resumeText.length * 0.45;
+
+            if (hasEmail) pillar3Score += 3;
+            if (hasPhone) pillar3Score += 2;
+            if (hasLink) pillar3Score += 3;
+            if (hasEducation && eduNearTop) pillar3Score += 4;
+            else if (hasEducation) pillar3Score += 2;
+            if (hasGpaOrGrad) pillar3Score += 2;
+            if (hasSkills) pillar3Score += 2;
+            if (hasProjects) pillar3Score += 2;
+            if (hasExperience) pillar3Score += 2;
+            pillar3Score = Math.min(20, pillar3Score);
+
+            // PILLAR 4: ATS Parsability & Length (Max 15 pts)
+            let pillar4Score = 15;
+            const hygieneIssues = [];
+
+            if (wordCount < 250) {
+                pillar4Score -= 4;
+                hygieneIssues.push(`Word count is ${wordCount} words (aim for 350–650 word 1-page student sweet spot).`);
+            } else if (wordCount > 700) {
+                pillar4Score -= 3;
+                hygieneIssues.push(`Resume is ${wordCount} words — trim to <=650 words so it fits 1 clean page.`);
+            }
+
+            if (bullets.length < 4) {
+                pillar4Score -= 4;
+                hygieneIssues.push('Use standard bullet points (- or •) for experience and projects.');
+            }
+
+            const firstPersonPronouns = resumeText.match(/\b(I|me|my|myself|we|our)\b/g) || [];
+            if (firstPersonPronouns.length > 0) {
+                pillar4Score -= 2;
+                hygieneIssues.push(`Remove ${firstPersonPronouns.length} first-person pronoun(s) ("I", "my", "our") — start with action verbs.`);
+            }
+
+            const pipeCount = (resumeText.match(/\|/g) || []).length;
+            if (pipeCount > 8) {
+                pillar4Score -= 2;
+                hygieneIssues.push('Excessive "|" column dividers detected — keep single-column structure.');
+            }
+
+            if (/[^\x00-\x7F•–—’“”]/g.test(resumeText)) {
+                pillar4Score -= 2;
+                hygieneIssues.push('Non-ASCII symbols/emojis detected — replace with standard text.');
+            }
+            pillar4Score = Math.max(0, pillar4Score);
+
+            const totalScore = pillar1Score + pillar2Score + pillar3Score + pillar4Score;
+            const passProbability = Math.min(98, Math.max(12, Math.round(totalScore * 0.96)));
+
+            // Prioritized Checklist
+            const checklist = [];
+            const totalMissing = missingHardSkills.length + missingDomainConcepts.length;
+
+            if (totalMissing > 0) {
+                const estGain = Math.min(40 - pillar1Score, Math.max(4, Math.round(totalMissing * 2.1)));
+                checklist.push({
+                    priority: 'HIGH',
+                    title: `Inject ${totalMissing} missing JD keywords (${missingHardSkills.length} tools, ${missingDomainConcepts.length} concepts)`,
+                    desc: `Click any missing skill pill above to add it directly to your SKILLS section and boost keyword alignment.`,
+                    gain: `+${estGain} pts`
+                });
+            }
+
+            if (quantifiedBullets < Math.max(3, Math.ceil(bullets.length * 0.6))) {
+                const estGain = Math.min(25 - pillar2Score, 10);
+                checklist.push({
+                    priority: 'HIGH',
+                    title: `Quantify impact in ${Math.max(1, bullets.length - quantifiedBullets)} unmeasured bullets`,
+                    desc: `Only ${quantifiedBullets} of ${bullets.length} bullets include numbers, %, latency, or user scale. Use the X-Y-Z Rewriter tab.`,
+                    gain: `+${estGain} pts`
+                });
+            }
+
+            if (weakBulletsFound.length > 0) {
+                checklist.push({
+                    priority: 'MEDIUM',
+                    title: 'Upgrade passive starter phrases ("Responsible for", "Worked on")',
+                    desc: 'Start every bullet with an ownership verb (Engineered, Automated, Reduced, Analyzed).',
+                    gain: '+5 pts'
+                });
+            }
+
+            if (!hasLink || !hasPhone) {
+                checklist.push({
+                    priority: 'MEDIUM',
+                    title: 'Complete header contact info (Phone + GitHub/LinkedIn URL)',
+                    desc: 'Ensure recruiters can click your GitHub/LinkedIn and call you directly.',
+                    gain: '+3 pts'
+                });
+            }
+
+            if (!eduNearTop) {
+                checklist.push({
+                    priority: 'MEDIUM',
+                    title: 'Place EDUCATION section near the top of your resume',
+                    desc: 'For students and new grads, recruiters scan degree, GPA, and graduation date first.',
+                    gain: '+2 pts'
+                });
+            }
+
+            hygieneIssues.forEach(issue => {
+                checklist.push({
+                    priority: 'LOW',
+                    title: issue,
+                    desc: 'Ensures 100% clean text extraction across Workday, Greenhouse, and Lever.',
+                    gain: '+3 pts'
+                });
+            });
+
+            if (checklist.length === 0) {
+                checklist.push({
+                    priority: 'ELITE',
+                    title: 'Your resume is ATS Elite (90+)!',
+                    desc: 'Clean single-column hygiene, strong keyword alignment, and quantified X-Y-Z impact.',
+                    gain: 'Optimal'
+                });
+            }
+
+            const emailMatch = resumeText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            const phoneMatch = resumeText.match(/(\+?\d{1,2}\s?)?(\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+            const linkMatches = resumeText.match(/(?:https?:\/\/)?(?:www\.)?(?:github\.com|linkedin\.com)\/[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)?/gi) || [];
+            const eduLines = lines.filter(l => /\b(university|college|institute|b\.s\.|b\.a\.|bachelor|master|gpa|expected)\b/i.test(l));
+
+            return {
+                totalScore,
+                passProbability,
+                pillars: { p1: pillar1Score, p2: pillar2Score, p3: pillar3Score, p4: pillar4Score },
+                matchedKeywords,
+                missingHardSkills,
+                missingDomainConcepts,
+                missingKeywords: [...missingHardSkills, ...missingDomainConcepts],
+                weakBulletsFound,
+                checklist,
+                xray: {
+                    candidateName: lines[0] || 'Not Detected',
+                    email: emailMatch ? emailMatch[0] : 'MISSING',
+                    phone: phoneMatch ? phoneMatch[0] : 'MISSING',
+                    links: linkMatches,
+                    educationLines: eduLines,
+                    extractedSkills: matchedKeywords,
+                    bulletCount: bullets.length,
+                    wordCount,
+                    warnings: hygieneIssues
+                }
+            };
+        }
+
+        /**
+         * ============================================================================
+         * 4. RENDER DASHBOARD, X-RAY VIEW, HEATMAP & DUPLICATE-SAFE KEYWORD INJECTOR
+         * ============================================================================
+         */
+        function renderDashboard(analysis) {
+            appState.currentAnalysis = analysis;
+            const { totalScore, passProbability, pillars, matchedKeywords, missingHardSkills, missingDomainConcepts, checklist, xray } = analysis;
+
+            const ring = document.getElementById('score-ring');
+            const circumference = 314.16;
+            const offset = circumference - (totalScore / 100) * circumference;
+            ring.style.strokeDashoffset = offset;
+
+            let strokeColor = '#ef4444';
+            let badgeClass = 'bg-rose-100 text-rose-800';
+            let badgeText = 'Needs Work';
+            let headline = 'High risk of ATS auto-rejection — let’s fix key gaps';
+
+            if (totalScore >= 90) {
+                strokeColor = '#10b981';
+                badgeClass = 'bg-emerald-100 text-emerald-800';
+                badgeText = 'ATS Elite 90+';
+                headline = 'Top 5% ATS match! Ready to submit & reach out to recruiters';
+            } else if (totalScore >= 78) {
+                strokeColor = '#10b981';
+                badgeClass = 'bg-emerald-100 text-emerald-800';
+                badgeText = 'Interview Ready';
+                headline = 'Strong ATS alignment — polish remaining bullets to hit 90+';
+            } else if (totalScore >= 62) {
+                strokeColor = '#6366f1';
+                badgeClass = 'bg-indigo-100 text-indigo-800';
+                badgeText = 'Competitive';
+                headline = 'Good foundation — add missing keywords & metrics to stand out';
+            }
+
+            ring.style.stroke = strokeColor;
+            document.getElementById('total-score-text').textContent = totalScore;
+            document.getElementById('pass-prob-pill').textContent = `ATS Pass Prob: ${passProbability}%`;
+            document.getElementById('pass-prob-pill').className = `mt-2 px-3 py-1 rounded-full text-[11px] font-bold ${totalScore >= 75 ? 'bg-emerald-100 text-emerald-800' : 'bg-indigo-50 text-indigo-800'}`;
+
+            const badgeEl = document.getElementById('score-badge');
+            badgeEl.className = `px-2.5 py-0.5 rounded-full text-xs font-bold ${badgeClass}`;
+            badgeEl.textContent = badgeText;
+            document.getElementById('score-headline').textContent = headline;
+
+            const deltaEl = document.getElementById('score-delta');
+            if (appState.lastScore !== null && totalScore !== appState.lastScore) {
+                const diff = totalScore - appState.lastScore;
+                deltaEl.classList.remove('hidden');
+                if (diff > 0) {
+                    deltaEl.className = 'text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full';
+                    deltaEl.textContent = `▲ +${diff} pts from last scan`;
+                } else {
+                    deltaEl.className = 'text-xs font-bold text-rose-700 bg-rose-100 px-2.5 py-0.5 rounded-full';
+                    deltaEl.textContent = `▼ ${diff} pts`;
+                }
+            }
+            appState.lastScore = totalScore;
+
+            document.getElementById('p1-score').textContent = `${pillars.p1}/40`;
+            document.getElementById('p1-bar').style.width = `${(pillars.p1 / 40) * 100}%`;
+
+            document.getElementById('p2-score').textContent = `${pillars.p2}/25`;
+            document.getElementById('p2-bar').style.width = `${(pillars.p2 / 25) * 100}%`;
+
+            document.getElementById('p3-score').textContent = `${pillars.p3}/20`;
+            document.getElementById('p3-bar').style.width = `${(pillars.p3 / 20) * 100}%`;
+
+            document.getElementById('p4-score').textContent = `${pillars.p4}/15`;
+            document.getElementById('p4-bar').style.width = `${(pillars.p4 / 15) * 100}%`;
+
+            // Render Missing Hard Skills Pills using safe data attributes (XSS-safe for C++, C#, <script>)
+            const hardEl = document.getElementById('missing-hard-skills');
+            hardEl.innerHTML = missingHardSkills.length === 0
+                ? `<span class="text-xs font-semibold text-emerald-700">✓ All target tools covered!</span>`
+                : missingHardSkills.map(kw => `
+                    <button data-kw="${escapeHtml(kw)}" onclick="insertKeywordToSkills(this.getAttribute('data-kw'))" 
+                        class="px-2.5 py-1 rounded-lg bg-white hover:bg-indigo-600 text-rose-700 hover:text-white border border-rose-200 hover:border-indigo-600 text-xs font-semibold shadow-2xs transition cursor-pointer">
+                        + ${escapeHtml(formatKeywordCase(kw))}
+                    </button>
+                `).join('');
+
+            // Render Missing Domain Concepts Pills
+            const domainEl = document.getElementById('missing-domain-concepts');
+            domainEl.innerHTML = missingDomainConcepts.length === 0
+                ? `<span class="text-xs font-semibold text-emerald-700">✓ All domain concepts covered!</span>`
+                : missingDomainConcepts.map(kw => `
+                    <button data-kw="${escapeHtml(kw)}" onclick="insertKeywordToSkills(this.getAttribute('data-kw'))" 
+                        class="px-2.5 py-1 rounded-lg bg-white hover:bg-indigo-600 text-amber-800 hover:text-white border border-amber-200 hover:border-indigo-600 text-xs font-semibold shadow-2xs transition cursor-pointer">
+                        + ${escapeHtml(formatKeywordCase(kw))}
+                    </button>
+                `).join('');
+
+            // Render Matched Keywords
+            const matchedContainer = document.getElementById('matched-keywords-container');
+            matchedContainer.innerHTML = matchedKeywords.length === 0
+                ? `<span class="text-xs text-slate-400">No target keywords matched yet.</span>`
+                : matchedKeywords.map(kw => `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-xs font-semibold">
+                        ✓ ${escapeHtml(formatKeywordCase(kw))}
+                    </span>
+                `).join('');
+
+            // Render Checklist
+            const checklistContainer = document.getElementById('checklist-container');
+            checklistContainer.innerHTML = checklist.map(item => {
+                const pillStyle = item.priority === 'HIGH'
+                    ? 'bg-rose-100 text-rose-800'
+                    : item.priority === 'MEDIUM'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800';
+                return `
+                    <div class="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 flex items-start justify-between gap-3">
+                        <div class="space-y-1 min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider ${pillStyle}">${escapeHtml(item.priority)}</span>
+                                <h5 class="text-xs sm:text-sm font-bold text-slate-900">${escapeHtml(item.title)}</h5>
+                            </div>
+                            <p class="text-xs text-slate-600 leading-relaxed">${escapeHtml(item.desc)}</p>
+                        </div>
+                        <span class="flex-shrink-0 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-mono text-xs font-bold border border-indigo-100">
+                            ${escapeHtml(item.gain)}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+
+            renderXRayView(xray);
+            renderHeatmap(document.getElementById('resume-input').value);
+        }
+
+        function renderXRayView(xray) {
+            const container = document.getElementById('xray-container');
+            container.innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 min-w-0">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Parsed Candidate Name</span>
+                        <p class="text-sm font-bold text-slate-900 font-mono mt-0.5 truncate">${escapeHtml(xray.candidateName)}</p>
+                    </div>
+                    <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 min-w-0">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Parsed Contact & Links</span>
+                        <p class="text-xs font-mono text-slate-800 mt-0.5 truncate">Email: <strong>${escapeHtml(xray.email)}</strong></p>
+                        <p class="text-xs font-mono text-slate-800 truncate">Phone: <strong>${escapeHtml(xray.phone)}</strong></p>
+                        <p class="text-xs font-mono text-indigo-700 truncate">URLs: ${xray.links.length ? escapeHtml(xray.links.join(', ')) : 'None detected'}</p>
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Extracted Skills Array (${xray.extractedSkills.length} matched tokens)</span>
+                    <div class="font-mono text-xs bg-slate-900 text-emerald-300 p-3 rounded-lg overflow-x-auto">
+                        [${xray.extractedSkills.map(s => `"${escapeHtml(formatKeywordCase(s))}"`).join(', ')}]
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Detected Education Block</span>
+                    <div class="font-mono text-xs text-slate-800 space-y-1">
+                        ${xray.educationLines.length ? xray.educationLines.map(l => `<div>• ${escapeHtml(l)}</div>`).join('') : '<div class="text-rose-600">No standard education line detected.</div>'}
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl ${xray.warnings.length ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/70 border-emerald-200'} border">
+                    <span class="text-[10px] font-bold uppercase tracking-wider ${xray.warnings.length ? 'text-amber-800' : 'text-emerald-800'} block mb-1">
+                        Parser Diagnostics (${xray.bulletCount} Bullets • ${xray.wordCount} Words)
+                    </span>
+                    ${xray.warnings.length
+                        ? `<ul class="text-xs text-amber-900 list-disc ml-4 space-y-1">${xray.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
+                        : `<p class="text-xs font-semibold text-emerald-800">✓ Zero parser warnings. 100% machine-readable single-column text stream.</p>`
+                    }
+                </div>
+            `;
+        }
+
+        function renderHeatmap(resumeText) {
+            const container = document.getElementById('heatmap-container');
+            const lines = resumeText.split('\n');
+            const metricRegex = /(\d+%|\$\d+|\d+\+|\d+x|\b\d+\s*(ms|sec|seconds|mins|minutes|hours|hrs|days|users|students|tickets|endpoints|datasets|records|pages|vulnerabilities|alerts)\b)/i;
+
+            container.innerHTML = lines.map(rawLine => {
+                const line = rawLine.trim();
+                if (!line) return `<div class="h-2"></div>`;
+
+                if (/^[A-Z\s&/]{4,30}$/.test(line)) {
+                    return `<div class="px-2 py-1 rounded bg-indigo-50 text-indigo-900 font-bold border-l-4 border-indigo-500 mt-2">${escapeHtml(line)}</div>`;
+                }
+
+                if (/^[-•*▪]/.test(line)) {
+                    const cleanB = line.replace(/^[-•*▪]\s*/, '');
+                    const lowerB = cleanB.toLowerCase();
+                    const hasMetric = metricRegex.test(cleanB);
+                    const firstWord = lowerB.split(/\s+/)[0]?.replace(/[^a-z]/g, '');
+                    const startsStrong = STRONG_ACTION_VERBS.includes(firstWord);
+                    const hasWeakPhrase = WEAK_PASSIVE_PHRASES.some(wp => lowerB.startsWith(wp) || lowerB.includes(` ${wp} `));
+
+                    if (hasMetric && startsStrong && !hasWeakPhrase) {
+                        return `<div class="px-2.5 py-1 rounded bg-emerald-50/90 text-emerald-950 border-l-4 border-emerald-500 flex items-center justify-between gap-2"><span>${escapeHtml(line)}</span><span class="text-[10px] font-bold text-emerald-700 flex-shrink-0">STRONG X-Y-Z</span></div>`;
+                    } else {
+                        return `<div class="px-2.5 py-1 rounded bg-amber-50/90 text-amber-950 border-l-4 border-amber-400 flex items-center justify-between gap-2"><span>${escapeHtml(line)}</span><span class="text-[10px] font-bold text-amber-700 flex-shrink-0">NEEDS METRIC/VERB</span></div>`;
+                    }
+                }
+
+                return `<div class="px-2 py-0.5 text-slate-800">${escapeHtml(line)}</div>`;
+            }).join('');
+        }
+
+        function formatKeywordCase(kw) {
+            const upperMap = {
+                'sql': 'SQL', 'nosql': 'NoSQL', 'api': 'API', 'rest api': 'REST API', 'restful apis': 'RESTful APIs',
+                'aws': 'AWS', 'aws s3': 'AWS S3', 'gcp': 'GCP', 'ci/cd': 'CI/CD', 'html': 'HTML', 'css': 'CSS',
+                'c++': 'C++', 'c#': 'C#', '.net': '.NET',
+                'siem': 'SIEM', 'edr': 'EDR', 'soc': 'SOC', 'ioc': 'IOCs', 'tcp/ip': 'TCP/IP', 'eda': 'EDA',
+                'etl': 'ETL', 'kpi': 'KPIs', 'a/b testing': 'A/B Testing', 'node.js': 'Node.js', 'next.js': 'Next.js',
+                'typescript': 'TypeScript', 'javascript': 'JavaScript', 'postgresql': 'PostgreSQL', 'mongodb': 'MongoDB',
+                'power bi': 'Power BI', 'mitre att&ck': 'MITRE ATT&CK', 'comptia security+': 'CompTIA Security+'
+            };
+            if (upperMap[kw.toLowerCase()]) return upperMap[kw.toLowerCase()];
+            return kw.charAt(0).toUpperCase() + kw.slice(1);
+        }
+
+        function insertKeywordToSkills(kw) {
+            const resumeEl = document.getElementById('resume-input');
+            let text = resumeEl.value;
+            const formattedKw = formatKeywordCase(kw);
+
+            // Prevent duplicate insertion if already present
+            if (buildTechKeywordRegex(kw).test(text)) {
+                showToast(`"${formattedKw}" is already in your resume!`, 'info');
+                return;
+            }
+
+            pushHistorySnapshot(text);
+
+            const skillsRegex = /(SKILLS[^\n]*\n(?:[^\n]+\n?)*)/i;
+            if (skillsRegex.test(text)) {
+                text = text.replace(skillsRegex, (match) => {
+                    const trimmed = match.replace(/\n+$/, '');
+                    if (/Tools:|Frameworks:|Security:|Technologies:|Core Competencies:|Target Skills:/i.test(trimmed)) {
+                        return trimmed + `, ${formattedKw}\n\n`;
+                    }
+                    return trimmed + `\nTarget Skills: ${formattedKw}\n\n`;
+                });
+            } else {
+                text += `\n\nSKILLS\nTechnical Skills: ${formattedKw}`;
+            }
+
+            resumeEl.value = text;
+            updateLiveStats();
+            showToast(`Injected "${formattedKw}" into Skills & rescanned!`, 'success');
+            runFullScan(false);
+        }
+
+        /**
+         * ============================================================================
+         * 5. GEMINI AI SUITE (gemini-3.5-flash-lite -> gemini-2.5-flash-lite -> LOCAL)
+         * ============================================================================
+         */
+        async function fetchGeminiWithModelFallback(payload, key) {
+            const models = ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite'];
+            let lastError = null;
+
+            for (const model of models) {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+                let delay = 900;
+
+                for (let attempt = 0; attempt <= 2; attempt++) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-goog-api-key': key
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status === 404) {
+                            // Model not found -> break inner retry loop and try next model
+                            lastError = new Error(`Model ${model} returned 404`);
+                            break;
+                        }
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        const data = await response.json();
+                        return { data, modelUsed: model };
+                    } catch (err) {
+                        lastError = err;
+                        if (attempt === 2) break;
+                        await new Promise(res => setTimeout(res, delay));
+                        delay *= 2;
+                    }
+                }
+            }
+            throw lastError || new Error('Gemini API unreachable');
+        }
+
+        async function generateAIOptimizations(resumeText, jdText, analysis) {
+            const activeKey = getActiveGeminiKey();
+
+            // If no API key is configured (typical on public GitHub Pages), run Instant Local AI Mode immediately
+            if (!activeKey) {
+                document.getElementById('ai-engine-badge').textContent = '⚡ Instant Local AI Mode';
+                return buildSmartHeuristicFallback(resumeText, jdText, analysis);
+            }
+
+            const systemPrompt = `You are an elite university career coach and technical recruiter specializing in ATS optimization for students and new grads.
+Given the student's resume, target job description, and missing keywords, generate a complete 4-part career optimization package in valid JSON:
+1. "bulletRewrites": Rewrite 3-5 weak resume bullets using Google's X-Y-Z formula ("Accomplished [X] as measured by [Y], by doing [Z]"). Start with strong action verbs, weave in missing JD keywords naturally, and include realistic metrics (in brackets like [35%] if estimated).
+2. "coverLetter": Write a punchy, non-generic 3-paragraph student cover letter referencing specific projects/skills from the resume and aligning directly with the target JD.
+3. "coldOutreach": Write a short, high-converting cold email / LinkedIn message (under 120 words) to a recruiter or hiring manager highlighting the student's top project and interest in the role.
+4. "interviewPrep": Generate 5 tailored technical & behavioral mock interview questions based on the student's resume projects and JD skill gaps, each with a concise STAR-method answer framework.`;
+
+            const userQuery = `RESUME:\n${resumeText}\n\nTARGET JOB DESCRIPTION:\n${jdText || 'Entry-Level Software / Data / Security Internship'}\n\nMISSING KEYWORDS:\n${analysis.missingKeywords.join(', ')}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            bulletRewrites: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        original: { type: "STRING" },
+                                        improved: { type: "STRING" },
+                                        keywordsAdded: { type: "ARRAY", items: { type: "STRING" } },
+                                        rationale: { type: "STRING" }
+                                    },
+                                    required: ["original", "improved", "keywordsAdded", "rationale"]
+                                }
+                            },
+                            coverLetter: { type: "STRING" },
+                            coldOutreach: { type: "STRING" },
+                            interviewPrep: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        type: { type: "STRING" },
+                                        question: { type: "STRING" },
+                                        starFramework: { type: "STRING" }
+                                    },
+                                    required: ["type", "question", "starFramework"]
+                                }
+                            }
+                        },
+                        required: ["bulletRewrites", "coverLetter", "coldOutreach", "interviewPrep"]
+                    }
+                }
+            };
+
+            try {
+                const { data, modelUsed } = await fetchGeminiWithModelFallback(payload, activeKey);
+                const rawJson = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!rawJson) throw new Error('Empty Gemini response');
+                const parsed = JSON.parse(rawJson);
+                document.getElementById('ai-engine-badge').textContent = `✨ Gemini AI Mode (${modelUsed})`;
+                return parsed;
+            } catch (err) {
+                console.warn('Falling back to Instant Local AI Mode:', err);
+                document.getElementById('ai-engine-badge').textContent = '⚡ Instant Local AI Mode (Fallback)';
+                showToast('Gemini API rate-limited or invalid key — switched to Instant Local AI Mode.', 'info');
+                return buildSmartHeuristicFallback(resumeText, jdText, analysis);
+            }
+        }
+
+        // Deterministic Zero-Cost Local Heuristic AI Engine (Guarantees 100% functionality on GitHub Pages)
+        function buildSmartHeuristicFallback(resumeText, jdText, analysis) {
+            const lines = resumeText.split('\n').map(l => l.trim()).filter(Boolean);
+            const candidateName = lines[0] || 'Student Applicant';
+            const missing = analysis.missingKeywords.slice(0, 6).map(formatKeywordCase);
+            const matched = analysis.matchedKeywords.slice(0, 4).map(formatKeywordCase);
+            const kw1 = missing[0] || matched[0] || 'Python';
+            const kw2 = missing[1] || matched[1] || 'SQL';
+            const kw3 = missing[2] || matched[2] || 'Git';
+
+            const weakBullets = analysis.weakBulletsFound.slice(0, 4);
+            const fallbackSource = weakBullets.length > 0 ? weakBullets : [
+                'Worked on a web application for students to find study partners on campus.',
+                'Responsible for building the frontend pages and connecting to a backend database.'
+            ];
+
+            const verbUpgrades = ['Engineered', 'Architected', 'Automated', 'Streamlined'];
+            const metricsPool = [
+                'reducing processing latency by [35%] across [500+] test records',
+                'improving workflow efficiency by [40%] for [120+] student users',
+                'achieving [98%] test coverage and cutting manual review time by [4 hrs/week]',
+                'accelerating insight delivery by [30%] for cross-functional teams'
+            ];
+
+            const bulletRewrites = fallbackSource.map((orig, idx) => {
+                const cleaned = orig
+                    .replace(/^(responsible for|worked on|helped with|helped|assisted with|assisted|used|made)\s+/i, '')
+                    .replace(/\.$/, '');
+                const verb = verbUpgrades[idx % verbUpgrades.length];
+                const metric = metricsPool[idx % metricsPool.length];
+                const injectedKw = missing[idx % Math.max(1, missing.length)] || kw1;
+
+                return {
+                    original: orig,
+                    improved: `${verb} ${cleaned} leveraging ${injectedKw} and ${kw2}, ${metric}.`,
+                    keywordsAdded: [injectedKw, kw2],
+                    rationale: 'Replaced passive phrasing with a strong ownership verb, integrated target JD keywords, and added X-Y-Z metrics.'
+                };
+            });
+
+            const roleTitle = (jdText.split('\n')[0] || 'Internship Position').trim().slice(0, 60);
+
+            return {
+                bulletRewrites,
+                coverLetter: `Dear Hiring Manager,\n\nI am excited to apply for the ${roleTitle} role. As an undergraduate student with hands-on experience in ${matched.slice(0, 3).join(', ') || kw1} and ${kw2}, I thrive on building reliable, measurable technical solutions.\n\nIn my recent academic and personal projects, I designed end-to-end workflows, debugged complex system bottlenecks, and collaborated with peers to ship user-focused tools. By combining strong analytical fundamentals with rapid adaptability in ${kw1} and ${kw3}, I am eager to contribute immediately to your team's engineering and product goals.\n\nThank you for your time and consideration. I would welcome the opportunity to discuss how my project background aligns with your team.\n\nSincerely,\n${candidateName}`,
+                coldOutreach: `Subject: ${roleTitle} Applicant — ${candidateName} (${kw1} / ${kw2})\n\nHi [Recruiter/Hiring Manager Name],\n\nI recently applied for the ${roleTitle} position and wanted to share a quick note. I'm a current student with hands-on project experience building solutions with ${kw1}, ${kw2}, and ${kw3}.\n\nI'd love 10 minutes to learn more about what your team looks for in standout interns this cycle. Thanks so much for your time!\n\nBest,\n${candidateName}`,
+                interviewPrep: [
+                    {
+                        type: 'Project Deep-Dive',
+                        question: `Walk me through the architecture and biggest technical bottleneck of the primary project on your resume.`,
+                        starFramework: `Situation: State the project scope and user problem. Task: Define your ownership. Action: Explain the exact stack (${kw1}, ${kw2}) and trade-offs you made. Result: Quantify latency, accuracy, or user adoption improvements.`
+                    },
+                    {
+                        type: 'JD Skill Alignment',
+                        question: `This role relies heavily on ${kw1} and ${kw2}. How have you applied or practiced these in coursework or labs?`,
+                        starFramework: `Situation: Reference a lab or personal project requiring data/system reliability. Action: Detail how you implemented ${kw1}/${kw2} workflows and validated edge cases. Result: Share measurable speed or quality gains.`
+                    },
+                    {
+                        type: 'Debugging & Troubleshooting',
+                        question: `Tell me about a time an application, script, or analysis broke unexpectedly. How did you isolate the root cause?`,
+                        starFramework: `Situation: Describe the symptom/failure. Task: Isolate root cause under a deadline. Action: Detail systematic log inspection, hypothesis testing, and fix verification. Result: Explain how you prevented recurrence.`
+                    },
+                    {
+                        type: 'Behavioral / Teamwork',
+                        question: `Describe a time you collaborated with teammates or stakeholders with different technical backgrounds.`,
+                        starFramework: `Situation: Group project or tutoring/helpdesk scenario. Action: Explain how you translated technical concepts clearly and aligned milestones. Result: Highlight on-time delivery and positive feedback.`
+                    },
+                    {
+                        type: 'Rapid Learning',
+                        question: `What is a technical concept from our job description (such as ${kw3}) that you are currently leveling up on?`,
+                        starFramework: `Action: Show proactive learning—mention building a sandbox prototype, reading official docs, and applying it to a small benchmark problem.`
+                    }
+                ]
+            };
+        }
+
+        function renderAIResults(aiData) {
+            appState.aiSuggestions = aiData;
+
+            const container = document.getElementById('rewrites-container');
+            if (!aiData.bulletRewrites || aiData.bulletRewrites.length === 0) {
+                container.innerHTML = `<div class="p-4 rounded-xl bg-slate-50 text-xs text-slate-600">No weak bullets detected! Your bullets already look strong.</div>`;
+            } else {
+                container.innerHTML = aiData.bulletRewrites.map((item, index) => `
+                    <div class="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+                        <div class="p-3.5 bg-rose-50/50 border-b border-slate-100">
+                            <span class="text-[10px] font-extrabold uppercase tracking-wider text-rose-600 block mb-1">Before (Passive / Unquantified)</span>
+                            <p class="text-xs text-slate-600 line-through decoration-rose-300">${escapeHtml(item.original)}</p>
+                        </div>
+                        <div class="p-4 bg-emerald-50/30 space-y-2.5">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">After (Google X-Y-Z Formula)</span>
+                                <button onclick="applySingleBullet(${index})" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition cursor-pointer">
+                                    ✓ Replace in Resume
+                                </button>
+                            </div>
+                            <p class="text-xs sm:text-sm font-medium text-slate-900 leading-relaxed">${escapeHtml(item.improved)}</p>
+                            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <div class="flex flex-wrap gap-1">
+                                    ${(item.keywordsAdded || []).map(k => `<span class="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-semibold">+${escapeHtml(k)}</span>`).join('')}
+                                </div>
+                                <span class="text-[11px] text-slate-500 italic">${escapeHtml(item.rationale)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('cover-letter-output').value = aiData.coverLetter || '';
+            document.getElementById('cold-email-output').value = aiData.coldOutreach || '';
+
+            const interviewEl = document.getElementById('interview-questions-container');
+            if (aiData.interviewPrep && aiData.interviewPrep.length > 0) {
+                interviewEl.innerHTML = aiData.interviewPrep.map((q, idx) => `
+                    <details class="group rounded-xl border border-slate-200 bg-white overflow-hidden" ${idx === 0 ? 'open' : ''}>
+                        <summary class="p-4 cursor-pointer list-none flex items-start justify-between gap-3 hover:bg-slate-50 transition">
+                            <div>
+                                <span class="inline-block px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-extrabold uppercase tracking-wider mb-1">Q${idx + 1} • ${escapeHtml(q.type)}</span>
+                                <h5 class="text-xs sm:text-sm font-bold text-slate-900">${escapeHtml(q.question)}</h5>
+                            </div>
+                            <span class="text-xs font-bold text-indigo-600 flex-shrink-0 mt-1 group-open:hidden">Show STAR ▼</span>
+                            <span class="text-xs font-bold text-slate-400 flex-shrink-0 mt-1 hidden group-open:inline">Hide ▲</span>
+                        </summary>
+                        <div class="px-4 pb-4 pt-2 border-t border-slate-100 bg-slate-50/70 text-xs text-slate-700 leading-relaxed">
+                            <strong class="text-indigo-900">STAR Answer Strategy:</strong> ${escapeHtml(q.starFramework)}
+                        </div>
+                    </details>
+                `).join('');
+            }
+        }
+
+        function applySingleBullet(index) {
+            const rewrite = appState.aiSuggestions?.bulletRewrites?.[index];
+            if (!rewrite) return;
+
+            const resumeEl = document.getElementById('resume-input');
+            pushHistorySnapshot(resumeEl.value);
+            let text = resumeEl.value;
+
+            if (text.includes(rewrite.original)) {
+                text = text.replace(rewrite.original, rewrite.improved);
+            } else {
+                const stripped = rewrite.original.replace(/^[-•*▪]\s*/, '');
+                if (text.includes(stripped)) {
+                    text = text.replace(stripped, rewrite.improved);
+                } else {
+                    text += `\n- ${rewrite.improved}`;
+                }
+            }
+
+            resumeEl.value = text;
+            updateLiveStats();
+            showToast('Replaced bullet with X-Y-Z version & rescanned!', 'success');
+            runFullScan(false);
+        }
+
+        /**
+         * ============================================================================
+         * 6. ONE-CLICK APPLY ALL FIXES & HARVARD/JAKE'S ATS PDF EXPORT
+         * ============================================================================
+         */
+        function applyAllFixes() {
+            const resumeEl = document.getElementById('resume-input');
+            let text = resumeEl.value.trim();
+            if (!text) {
+                showToast('Please paste a resume first.', 'error');
+                return;
+            }
+
+            pushHistorySnapshot(resumeEl.value);
+
+            // 1. Insert missing keywords into SKILLS without duplicates
+            if (appState.currentAnalysis?.missingKeywords?.length > 0) {
+                const uniqueMissing = appState.currentAnalysis.missingKeywords
+                    .filter(kw => !buildTechKeywordRegex(kw).test(text))
+                    .map(formatKeywordCase);
+
+                if (uniqueMissing.length > 0) {
+                    const formattedMissing = uniqueMissing.join(', ');
+                    const skillsRegex = /(SKILLS[^\n]*\n(?:[^\n]+\n?)*)/i;
+                    if (skillsRegex.test(text)) {
+                        text = text.replace(skillsRegex, (match) => {
+                            const trimmed = match.replace(/\n+$/, '');
+                            return `${trimmed}\nTarget Competencies: ${formattedMissing}\n\n`;
+                        });
+                    } else {
+                        text += `\n\nSKILLS\nTarget Competencies: ${formattedMissing}`;
+                    }
+                }
+            }
+
+            // 2. Apply all AI X-Y-Z bullet rewrites
+            if (appState.aiSuggestions?.bulletRewrites) {
+                appState.aiSuggestions.bulletRewrites.forEach(rw => {
+                    const stripped = rw.original.replace(/^[-•*▪]\s*/, '');
+                    if (text.includes(stripped)) {
+                        text = text.replace(stripped, rw.improved);
+                    }
+                });
+            }
+
+            resumeEl.value = text;
+            updateLiveStats();
+            runFullScan(false);
+            showToast('Applied all keyword & AI X-Y-Z upgrades! (Click Undo anytime to revert)', 'success');
+        }
+
+        function copyElementText(elementId, successMsg) {
+            const el = document.getElementById(elementId);
+            if (!el || !el.value.trim()) {
+                showToast('Generate AI content first before copying.', 'error');
+                return;
+            }
+            el.select();
+            el.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast(successMsg, 'success');
+            } catch (err) {
+                showToast('Select all and press Ctrl+C / Cmd+C to copy.', 'info');
+            }
+        }
+
+        function copyOptimizedResume() {
+            copyElementText('resume-input', 'Copied clean ATS resume to clipboard!');
+        }
+
+        function downloadTxt() {
+            const content = document.getElementById('resume-input').value;
+            if (!content.trim()) {
+                showToast('Nothing to download yet!', 'error');
+                return;
+            }
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ATS_Optimized_Student_Resume.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Downloaded ATS_Optimized_Student_Resume.txt', 'success');
+        }
+
+        // Builds a clean Harvard / Jake's-style single-column ATS print sheet
+        function printAtsPdf() {
+            const content = document.getElementById('resume-input').value.trim();
+            if (!content) {
+                showToast('Nothing to print yet!', 'error');
+                return;
+            }
+
+            const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+            let html = '';
+
+            lines.forEach((line, idx) => {
+                if (idx === 0) {
+                    html += `<h1>${escapeHtml(line)}</h1>`;
+                } else if (idx === 1 && (line.includes('@') || line.includes('|'))) {
+                    html += `<div class="ats-contact-line">${escapeHtml(line)}</div>`;
+                } else if (/^[A-Z\s&/]{4,30}$/.test(line)) {
+                    html += `<div class="ats-section-header">${escapeHtml(line)}</div>`;
+                } else if (/^[-•*▪]/.test(line)) {
+                    const cleanBullet = line.replace(/^[-•*▪]\s*/, '');
+                    html += `<div class="ats-bullet">• ${escapeHtml(cleanBullet)}</div>`;
+                } else {
+                    html += `<div class="ats-line">${escapeHtml(line)}</div>`;
+                }
+            });
+
+            const printArea = document.getElementById('printable-resume-area');
+            printArea.innerHTML = html;
+            printArea.classList.remove('hidden');
+            window.print();
+            setTimeout(() => {
+                printArea.classList.add('hidden');
+            }, 500);
+        }
+
+        /**
+         * ============================================================================
+         * 7. MAIN SCAN & OPTIMIZE ORCHESTRATOR
+         * ============================================================================
+         */
+        async function runFullScan(triggerAI = false) {
+            const resumeText = document.getElementById('resume-input').value.trim();
+            const jdText = document.getElementById('jd-input').value.trim();
+
+            if (!resumeText) {
+                showToast('Paste a resume or click a Student Preset at the top first!', 'error');
+                return;
+            }
+
+            const analysis = analyzeResume(resumeText, jdText);
+            renderDashboard(analysis);
+
+            if (triggerAI) {
+                switchTab('rewriter');
+                const loadingEl = document.getElementById('ai-loading-state');
+                const btn = document.getElementById('ai-optimize-btn');
+
+                loadingEl.classList.remove('hidden');
+                btn.disabled = true;
+                btn.classList.add('opacity-70');
+
+                try {
+                    const aiData = await generateAIOptimizations(resumeText, jdText, analysis);
+                    renderAIResults(aiData);
+                    showToast('Full AI Career Suite ready! Explore X-Y-Z Rewriter, Cover Letter & Interview Prep.', 'success');
+                } finally {
+                    loadingEl.classList.add('hidden');
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70');
+                }
+            }
+        }
+
+        // Restore saved draft from localStorage if available, otherwise load SWE preset
+        window.addEventListener('DOMContentLoaded', () => {
+            refreshIcons();
+            updateNavbarAiStatus();
+
+            let savedResume = '';
+            let savedJd = '';
+            try {
+                savedResume = localStorage.getItem(STORAGE_KEYS.RESUME_DRAFT) || '';
+                savedJd = localStorage.getItem(STORAGE_KEYS.JD_DRAFT) || '';
+            } catch (e) {}
+
+            if (savedResume.trim()) {
+                document.getElementById('resume-input').value = savedResume;
+                document.getElementById('jd-input').value = savedJd;
+                updateLiveStats();
+                runFullScan(false);
+            } else {
+                loadPreset('swe');
+            }
+        });
+    </script>
+</body>
+</html>
